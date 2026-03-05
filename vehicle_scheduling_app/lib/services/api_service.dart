@@ -155,7 +155,7 @@ class ApiService {
     if (error.toString().contains('SocketException') ||
         error.toString().contains('Failed host lookup')) {
       return ApiException(
-        'Cannot reach server. Make sure your backend is running on port 3000.',
+        'Cannot reach server at ${AppConfig.baseUrl}. Check your connection.',
         0,
       );
     }
