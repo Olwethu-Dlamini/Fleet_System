@@ -772,8 +772,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                   ),
                   DropdownMenuItem(value: 'delivery', child: Text('Delivery')),
                   DropdownMenuItem(
-                    value: 'Miscellenous',
-                    child: Text('Miscellenous'),
+                    value: 'miscellaneous',
+                    child: Text('Miscellaneous'),
                   ),
                 ],
                 onChanged: (v) => setState(() => _jobType = v!),

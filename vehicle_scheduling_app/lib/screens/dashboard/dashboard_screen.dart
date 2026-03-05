@@ -1,7 +1,12 @@
 // ============================================
 // FILE: lib/screens/dashboard/dashboard_screen.dart
 // PURPOSE: Role-aware dashboard
-// CHANGES: Admin AppBar gets a "Users" icon button → UsersScreen
+//
+// FIXES:
+//   • _loadDashboard() calls loadMyJobs() for technicians instead of
+//     loadJobs() so only their assigned jobs are fetched from the server.
+//   • _buildTechnicianDashboard() filters using hasTechnician(userId)
+//     OR driverId == userId — covers both assignment paths.
 // ============================================
 
 import 'dart:math' as math;
@@ -14,7 +19,7 @@ import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/services/api_service.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/job_detail_screen.dart';
-import 'package:vehicle_scheduling_app/screens/users/users_screen.dart'; // ← NEW
+import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
 
 // ── Pattern types for stat card decorative art ─────────────────
 enum _PatternType { circles, dots, waves, diagonal }
@@ -142,6 +147,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     auth.injectToken(context.read<VehicleProvider>().vehicleService.apiService);
   }
 
+  // ============================================================
+  // FIX: Technicians call loadMyJobs() so the server filters by
+  //      their user ID via job_technicians. Admin/Scheduler call
+  //      loadJobs() to get everything.
+  // ============================================================
   Future<void> _loadDashboard() async {
     if (!mounted) return;
     setState(() {
@@ -150,37 +160,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
     _injectTokens();
 
-    await Future.wait([
-      context.read<JobProvider>().loadJobs(),
-      context.read<VehicleProvider>().loadVehicles(),
-    ]);
+    final auth = context.read<AuthProvider>();
 
-    if (!mounted) return;
+    if (auth.isTechnician) {
+      // Technicians only load their own assigned jobs from /api/jobs/my-jobs
+      await context.read<JobProvider>().loadMyJobs();
+    } else {
+      // Admin / Scheduler load all jobs and vehicles
+      await Future.wait([
+        context.read<JobProvider>().loadJobs(),
+        context.read<VehicleProvider>().loadVehicles(),
+      ]);
 
-    try {
-      final res = await _apiService.get(
-        '${AppConfig.dashboardEndpoint}/summary',
-      );
-      if (res.containsKey('summary') && res['summary'] is Map) {
-        final s = res['summary'] as Map<String, dynamic>;
-        if (mounted) {
-          setState(() {
-            _summary = {
-              'totalJobsToday': s['jobsToday'] ?? 0,
-              'pendingJobs': _countStatus(res['jobsToday'], 'pending'),
-              'inProgressJobs': s['vehiclesBusy'] ?? 0,
-              'completedJobs': _countStatus(res['jobsToday'], 'completed'),
-              'totalVehicles': s['totalVehicles'] ?? 0,
-              'activeVehicles': s['vehiclesAvailable'] ?? 0,
-            };
-            _loading = false;
-          });
-          return;
+      if (!mounted) return;
+
+      try {
+        final res = await _apiService.get(
+          '${AppConfig.dashboardEndpoint}/summary',
+        );
+        if (res.containsKey('summary') && res['summary'] is Map) {
+          final s = res['summary'] as Map<String, dynamic>;
+          if (mounted) {
+            setState(() {
+              _summary = {
+                'totalJobsToday': s['jobsToday'] ?? 0,
+                'pendingJobs': _countStatus(res['jobsToday'], 'pending'),
+                'inProgressJobs': s['vehiclesBusy'] ?? 0,
+                'completedJobs': _countStatus(res['jobsToday'], 'completed'),
+                'totalVehicles': s['totalVehicles'] ?? 0,
+                'activeVehicles': s['vehiclesAvailable'] ?? 0,
+              };
+              _loading = false;
+            });
+            return;
+          }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
 
-    _computeSummaryLocally();
+      _computeSummaryLocally();
+      return;
+    }
+
+    // Technician path — compute their personal summary locally
+    if (mounted) {
+      setState(() => _loading = false);
+    }
   }
 
   int _countStatus(dynamic jobsList, String status) {
@@ -238,7 +262,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
-          // ── Users shortcut — admin only ──────────────────────
           if (auth.isAdmin)
             IconButton(
               icon: const Icon(Icons.people_outlined),
@@ -277,9 +300,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final today = DateTime.now();
     final userId = auth.user?.id;
 
-    final myJobs = jobProvider.allJobs
-        .where((j) => j.driverId == userId)
-        .toList();
+    // ── FIX: match by job_technicians list OR legacy driver_id ──
+    // Because jobs can be assigned via "Manage Drivers" (writes to
+    // job_technicians) or via the old driver_id field in job_assignments.
+    // hasTechnician() checks job.technicians — populated from
+    // technicians_json returned by /api/jobs/my-jobs.
+    final myJobs = jobProvider.allJobs.where((j) {
+      if (userId == null) return false;
+      return j.hasTechnician(userId) || j.driverId == userId;
+    }).toList();
 
     final todayJobs =
         myJobs
@@ -702,13 +731,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 20),
                 _buildStatCards(_summary),
                 const SizedBox(height: 24),
-
-                // ── Quick-access Users card — admin only ─────────
                 if (auth.isAdmin) ...[
                   _buildUsersQuickCard(),
                   const SizedBox(height: 24),
                 ],
-
                 if (vehicleStatus.isNotEmpty) ...[
                   _buildSectionTitle('Vehicle Status'),
                   const SizedBox(height: 12),
@@ -753,7 +779,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Quick-access Users card shown in admin dashboard body ─────
   Widget _buildUsersQuickCard() {
     return InkWell(
       onTap: () => Navigator.push(
@@ -819,7 +844,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  // ── Shared widgets ────────────────────────────────────────────
+  // ── Shared helpers ────────────────────────────────────────────
 
   Widget _buildError(String error) {
     return Center(
@@ -1026,7 +1051,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    '${data.value}',
+                    data.value,
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 38,

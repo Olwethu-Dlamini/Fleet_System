@@ -1,8 +1,14 @@
 // ============================================
 // FILE: lib/providers/job_provider.dart
 // PURPOSE: Job state management
-// NO CHANGES from your original — token injection happens at
-// the service layer (job_service.dart) not here.
+//
+// FIXES:
+//   • assignTechnicians() now reloads the specific job by ID instead of
+//     calling loadJobs() — works correctly for all roles and avoids
+//     fetching all jobs when a technician is on the job detail screen.
+//   • updateJobStatus() same fix — reloads the specific job by ID so
+//     the technician detail screen reflects the new status immediately.
+//   • loadMyJobs() already existed — used by dashboard for technicians.
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -66,6 +72,7 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // LOAD ALL JOBS  (admin / scheduler)
+  // GET /api/jobs  — returns every job in the system.
   // ==========================================
   Future<void> loadJobs() async {
     _status = JobStatus.loading;
@@ -85,9 +92,9 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // LOAD MY JOBS  (technician / driver)
-  // Calls GET /api/jobs/my-jobs — backend filters by the
-  // JWT user id, returning only jobs assigned to this user
-  // via the job_technicians table.
+  // GET /api/jobs/my-jobs — backend filters by the JWT user id,
+  // returning only jobs assigned to this technician via the
+  // job_technicians table OR as the legacy driver_id.
   // ==========================================
   Future<void> loadMyJobs() async {
     _status = JobStatus.loading;
@@ -141,7 +148,7 @@ class JobProvider extends ChangeNotifier {
     required int estimatedDurationMinutes,
     String priority = 'normal',
     required int createdBy,
-    List<int> technicianIds = const [], // ← NEW: assign drivers at creation
+    List<int> technicianIds = const [],
   }) async {
     _status = JobStatus.loading;
     _error = null;
@@ -196,8 +203,7 @@ class JobProvider extends ChangeNotifier {
         estimatedDurationMinutes: estimatedDurationMinutes,
       );
 
-      final index = _jobs.indexWhere((j) => j.id == jobId);
-      if (index != -1) _jobs[index] = updatedJob;
+      _replaceJobInList(updatedJob);
       if (_selectedJob?.id == jobId) _selectedJob = updatedJob;
 
       notifyListeners();
@@ -210,15 +216,13 @@ class JobProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // ASSIGN JOB
-  // Accepts optional technicianIds list (multi-driver).
-  // Falls back to legacy driverId if technicianIds not supplied.
+  // ASSIGN JOB  (vehicle + optional drivers)
   // ==========================================
   Future<bool> assignJob({
     required int jobId,
     required int vehicleId,
     int? driverId,
-    List<int> technicianIds = const [], // ← NEW: multi-driver support
+    List<int> technicianIds = const [],
     String? notes,
     required int assignedBy,
   }) async {
@@ -234,7 +238,9 @@ class JobProvider extends ChangeNotifier {
         assignedBy: assignedBy,
       );
 
-      await loadJobs();
+      // Reload just this job so the detail screen gets fresh assignment data
+      // without forcing a full list reload (important for technician context).
+      await _reloadSingleJob(jobId);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -244,8 +250,13 @@ class JobProvider extends ChangeNotifier {
   }
 
   // ==========================================
-  // ASSIGN TECHNICIANS  (update driver list only, no vehicle change)
-  // Calls PUT /api/job-assignments/:jobId/technicians
+  // ASSIGN TECHNICIANS
+  // Replaces the driver list on a job without changing its vehicle.
+  // Calls PUT /api/jobs/:id/technicians  (or the job-assignments route).
+  //
+  // FIX: previously called loadJobs() which broke technician context
+  // because technicians are not allowed to fetch all jobs.
+  // Now reloads only the specific job by ID.
   // ==========================================
   Future<bool> assignTechnicians({
     required int jobId,
@@ -261,8 +272,8 @@ class JobProvider extends ChangeNotifier {
         assignedBy: assignedBy,
       );
 
-      // Reload so the technicians list on the job is refreshed
-      await loadJobs();
+      // Reload only this job — safe for all roles (admin, scheduler, technician).
+      await _reloadSingleJob(jobId);
       return true;
     } catch (e) {
       _error = e.toString();
@@ -273,6 +284,10 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // UPDATE STATUS
+  //
+  // FIX: after optimistically updating the in-memory list, also fetch
+  // the full job from the server so technicians_json (driver list) and
+  // any other server-side changes are reflected in the detail screen.
   // ==========================================
   Future<bool> updateJobStatus({
     required int jobId,
@@ -290,6 +305,7 @@ class JobProvider extends ChangeNotifier {
         reason: reason,
       );
 
+      // Optimistic update in the list
       final index = _jobs.indexWhere((j) => j.id == jobId);
       if (index != -1) {
         _jobs[index] = _jobs[index].copyWith(currentStatus: newStatus);
@@ -299,6 +315,10 @@ class JobProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+
+      // Background refresh of the full job object (includes technicians_json)
+      _refreshJobSilently(jobId);
+
       return true;
     } catch (e) {
       _error = e.toString();
@@ -329,5 +349,46 @@ class JobProvider extends ChangeNotifier {
   void clearError() {
     _error = null;
     notifyListeners();
+  }
+
+  // ==========================================
+  // PRIVATE HELPERS
+  // ==========================================
+
+  /// Replace a job in the in-memory list by ID.
+  void _replaceJobInList(Job updated) {
+    final index = _jobs.indexWhere((j) => j.id == updated.id);
+    if (index != -1) _jobs[index] = updated;
+  }
+
+  /// Fetch the latest version of a single job from the server,
+  /// update the in-memory list and selectedJob, then notify listeners.
+  /// Used after mutations (assign, update status, manage drivers).
+  Future<void> _reloadSingleJob(int jobId) async {
+    try {
+      final fresh = await _jobService.getJobById(jobId);
+      if (fresh != null) {
+        _replaceJobInList(fresh);
+        if (_selectedJob?.id == jobId) _selectedJob = fresh;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Non-fatal — the optimistic update already happened.
+    }
+  }
+
+  /// Same as _reloadSingleJob but does NOT propagate errors and does not
+  /// change loading state — safe to fire-and-forget after updateJobStatus.
+  void _refreshJobSilently(int jobId) {
+    _jobService
+        .getJobById(jobId)
+        .then((fresh) {
+          if (fresh != null) {
+            _replaceJobInList(fresh);
+            if (_selectedJob?.id == jobId) _selectedJob = fresh;
+            notifyListeners();
+          }
+        })
+        .catchError((_) {});
   }
 }

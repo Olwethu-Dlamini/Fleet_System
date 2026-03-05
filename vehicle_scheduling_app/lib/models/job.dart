@@ -195,6 +195,8 @@ class Job {
         return 'Delivery';
       case 'maintenance':
         return 'Maintenance';
+      case 'miscellaneous':
+        return 'Miscellaneous';
       default:
         return jobType;
     }

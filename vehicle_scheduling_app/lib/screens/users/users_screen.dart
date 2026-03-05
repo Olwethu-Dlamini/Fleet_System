@@ -691,6 +691,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   bool _isActive = true;
   bool _saving = false;
   bool _showPass = false;
+  bool _showNewPass = false; // visibility toggle for new password
+  bool _changePassword = false; // edit mode: expand password section
   String? _saveError;
 
   bool get _isEditing => widget.user != null;
@@ -727,6 +729,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
 
     try {
       if (_isEditing) {
+        // Update profile fields
         await widget.service.updateUser(widget.user!.id, {
           'username': _usernameCtrl.text.trim(),
           'full_name': _nameCtrl.text.trim(),
@@ -734,6 +737,10 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           'role': _role,
           'is_active': _isActive ? 1 : 0,
         });
+        // Also update password if the admin entered a new one
+        if (_changePassword && _passCtrl.text.isNotEmpty) {
+          await widget.service.resetPassword(widget.user!.id, _passCtrl.text);
+        }
       } else {
         await widget.service.createUser(
           username: _usernameCtrl.text.trim(),
@@ -878,7 +885,9 @@ class _UserFormSheetState extends State<_UserFormSheet> {
               ),
               const SizedBox(height: 12),
 
-              // Password fields — only on create
+              // Password section
+              // Create mode: always shown and required
+              // Edit mode:   hidden behind a toggle; optional
               if (!_isEditing) ...[
                 _field(
                   ctrl: _passCtrl,
@@ -911,6 +920,106 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                     return null;
                   },
                 ),
+                const SizedBox(height: 12),
+              ] else ...[
+                // ── Edit mode: optional password change ──────────
+                InkWell(
+                  onTap: () => setState(() {
+                    _changePassword = !_changePassword;
+                    if (!_changePassword) {
+                      _passCtrl.clear();
+                      _confirmCtrl.clear();
+                    }
+                  }),
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _changePassword
+                          ? AppTheme.primaryColor.withOpacity(0.06)
+                          : AppTheme.backgroundColor,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: _changePassword
+                            ? AppTheme.primaryColor.withOpacity(0.4)
+                            : AppTheme.dividerColor,
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.lock_reset_outlined,
+                          size: 18,
+                          color: _changePassword
+                              ? AppTheme.primaryColor
+                              : AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Change Password',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: _changePassword
+                                  ? AppTheme.primaryColor
+                                  : AppTheme.textPrimary,
+                              fontWeight: _changePassword
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          _changePassword
+                              ? Icons.expand_less
+                              : Icons.expand_more,
+                          color: AppTheme.textSecondary,
+                          size: 20,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                if (_changePassword) ...[
+                  const SizedBox(height: 12),
+                  _field(
+                    ctrl: _passCtrl,
+                    label: 'New Password',
+                    icon: Icons.lock_outline,
+                    obscure: !_showNewPass,
+                    suffix: IconButton(
+                      icon: Icon(
+                        _showNewPass
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        size: 18,
+                      ),
+                      onPressed: () =>
+                          setState(() => _showNewPass = !_showNewPass),
+                    ),
+                    validator: (v) {
+                      if (!_changePassword) return null; // not changing — skip
+                      if (v == null || v.isEmpty) return 'Enter a new password';
+                      if (v.length < 6) return 'At least 6 characters';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  _field(
+                    ctrl: _confirmCtrl,
+                    label: 'Confirm New Password',
+                    icon: Icons.lock_reset_outlined,
+                    obscure: !_showNewPass,
+                    validator: (v) {
+                      if (!_changePassword) return null;
+                      if (v != _passCtrl.text) return 'Passwords do not match';
+                      return null;
+                    },
+                  ),
+                ],
                 const SizedBox(height: 12),
               ],
 
