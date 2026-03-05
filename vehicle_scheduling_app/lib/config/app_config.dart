@@ -24,7 +24,9 @@ class AppConfig {
   static const String baseUrlAndroid = 'http://10.0.2.2:3000/api';
 
   // Real Android device on same WiFi
-  static const String baseUrlDevice = 'http://172.16.100.56:3000/api';
+  //static const String baseUrlDevice = 'http://172.16.100.56:3000/api'; for local
+  static const String baseUrlDevice =
+      'http://3.231.191.15/api'; //foe aws instance
 
   // ==========================================
   // ACTIVE BASE URL
