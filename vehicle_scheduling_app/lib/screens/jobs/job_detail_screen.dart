@@ -74,6 +74,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
     switch (current) {
       case 'pending':
+        // Cannot move to 'assigned' without a vehicle attached.
+        // Show only 'cancelled' when no vehicle; full options when vehicle present.
+        if (_job.vehicleId == null) return ['cancelled'];
         return ['assigned', 'cancelled'];
       case 'assigned':
         return ['in_progress', 'cancelled'];
@@ -86,32 +89,42 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   Future<void> _updateStatus(String newStatus) async {
     final auth = context.read<AuthProvider>();
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Update Status'),
-        content: Text(
-          'Change status to "${newStatus.replaceAll('_', ' ').toUpperCase()}"?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Confirm'),
-          ),
-        ],
-      ),
-    );
 
-    if (confirm != true || !mounted) return;
+    // ── When cancelling, require a reason comment before proceeding ──
+    String? cancelReason;
+    if (newStatus == 'cancelled') {
+      cancelReason = await _showCancelReasonDialog();
+      // User dismissed without submitting — abort
+      if (cancelReason == null || !mounted) return;
+    } else {
+      // For all other status transitions just ask a simple confirm
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Update Status'),
+          content: Text(
+            'Change status to "${newStatus.replaceAll('_', ' ').toUpperCase()}"?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Confirm'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+    }
 
     final success = await context.read<JobProvider>().updateJobStatus(
       jobId: _job.id,
       newStatus: newStatus,
       changedBy: auth.user?.id ?? AppConfig.defaultUserId,
+      reason: cancelReason, // null for non-cancel transitions
     );
 
     if (!mounted) return;
@@ -122,6 +135,255 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     } else {
       _showSnack(
         context.read<JobProvider>().error ?? 'Failed to update status',
+        isError: true,
+      );
+    }
+  }
+
+  // ==========================================
+  // CANCEL REASON DIALOG
+  // Shows a text field requiring the user to enter a reason before
+  // the job status can be changed to 'cancelled'.
+  // Returns the trimmed reason string, or null if the user dismissed.
+  // ==========================================
+  Future<String?> _showCancelReasonDialog() async {
+    final controller = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+
+    final result = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.errorColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.cancel_outlined,
+                  color: AppTheme.errorColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              const Text(
+                'Cancel Job',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ],
+          ),
+          content: Form(
+            key: formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.errorColor.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppTheme.errorColor.withOpacity(0.2),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        size: 15,
+                        color: AppTheme.errorColor,
+                      ),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'A cancellation reason is required and will be saved to the job record.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.errorColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: controller,
+                  autofocus: true,
+                  maxLines: 3,
+                  maxLength: 300,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    labelText: 'Cancellation Reason *',
+                    hintText:
+                        'e.g. Customer not available, equipment not ready...',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: const BorderSide(
+                        color: AppTheme.errorColor,
+                        width: 2,
+                      ),
+                    ),
+                    alignLabelWithHint: true,
+                  ),
+                  validator: (val) {
+                    if (val == null || val.trim().isEmpty) {
+                      return 'Please enter a reason for cancelling this job';
+                    }
+                    if (val.trim().length < 5) {
+                      return 'Reason must be at least 5 characters';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Go Back'),
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.cancel_outlined, size: 16),
+              label: const Text('Confirm Cancel'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.errorColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onPressed: () {
+                if (formKey.currentState!.validate()) {
+                  Navigator.pop(ctx, controller.text.trim());
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+
+    controller.dispose();
+    return result;
+  }
+
+  // ==========================================
+  // UNASSIGN DRIVER (admin only)
+  // Removes a single driver from the job without opening the full dialog.
+  // ==========================================
+  Future<void> _unassignDriver(int driverId, String driverName) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Driver'),
+        content: Text(
+          'Remove "$driverName" from this job?\n\n'
+          'They will no longer see this job on their dashboard.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final remaining = _job.technicians
+        .where((t) => t.id != driverId)
+        .map((t) => t.id)
+        .toList();
+
+    final auth = context.read<AuthProvider>();
+    final success = await context.read<JobProvider>().assignTechnicians(
+      jobId: _job.id,
+      technicianIds: remaining,
+      assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      await context.read<JobProvider>().loadJobById(_job.id);
+      final updated = context.read<JobProvider>().selectedJob;
+      if (updated != null && mounted) setState(() => _job = updated);
+      _showSnack('$driverName removed from job');
+    } else {
+      _showSnack(
+        context.read<JobProvider>().error ?? 'Failed to remove driver',
+        isError: true,
+      );
+    }
+  }
+
+  // ==========================================
+  // UNASSIGN VEHICLE (admin only)
+  // Removes the vehicle assignment entirely.
+  // Job reverts to pending if it was in assigned state.
+  // ==========================================
+  Future<void> _unassignVehicle() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove Vehicle'),
+        content: Text(
+          'Remove ${_job.vehicleName ?? "this vehicle"} from the job?\n\n'
+          'The job will revert to Pending status.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.errorColor,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Remove Vehicle'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true || !mounted) return;
+
+    final success = await context.read<JobProvider>().unassignVehicle(
+      jobId: _job.id,
+    );
+
+    if (!mounted) return;
+
+    if (success) {
+      await context.read<JobProvider>().loadJobById(_job.id);
+      final updated = context.read<JobProvider>().selectedJob;
+      if (updated != null && mounted) setState(() => _job = updated);
+      _showSnack('Vehicle removed. Job is now Pending.');
+    } else {
+      _showSnack(
+        context.read<JobProvider>().error ?? 'Failed to remove vehicle',
         isError: true,
       );
     }
@@ -198,7 +460,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Future<void> _assignVehicle(int vehicleId) async {
-    if (_job.isAssigned) {
+    if (_job.vehicleId != null) {
       _showSnack(
         'Job already has a vehicle. Use "Swap Vehicle" to change.',
         isError: true,
@@ -229,7 +491,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   Future<void> _swapVehicle(int newVehicleId) async {
-    if (!_job.isAssigned) {
+    if (_job.vehicleId == null) {
       _showSnack(
         'No vehicle assigned. Use "Assign Vehicle" first.',
         isError: true,
@@ -299,6 +561,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     bool loading = true;
 
     final Set<int> selected = Set.from(_job.technicians.map((t) => t.id));
+
+    final isAdmin = context.read<AuthProvider>().isAdmin;
 
     await showDialog(
       context: context,
@@ -372,37 +636,45 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       children: available.map((driver) {
                         final isSelected = selected.contains(driver.id);
                         final isBusy = busyIds.contains(driver.id);
+                        // Admin can select busy drivers (force override);
+                        // schedulers/others cannot.
+                        final canSelect = !isBusy || isAdmin;
                         return Opacity(
-                          opacity: isBusy ? 0.45 : 1.0,
+                          opacity: (isBusy && !isAdmin) ? 0.45 : 1.0,
                           child: Tooltip(
                             message: isBusy
-                                ? '${driver.fullName} already has a job at this time'
+                                ? isAdmin
+                                      ? '⚠️ Has another job — admin override allowed'
+                                      : '${driver.fullName} already has a job at this time'
                                 : '',
                             child: CheckboxListTile(
-                              value: isSelected && !isBusy,
-                              // Disable busy drivers
-                              onChanged: isBusy
-                                  ? null
-                                  : (val) => setDialog(() {
+                              value: isSelected,
+                              onChanged: canSelect
+                                  ? (val) => setDialog(() {
                                       if (val == true)
                                         selected.add(driver.id);
                                       else
                                         selected.remove(driver.id);
-                                    }),
+                                    })
+                                  : null,
                               title: Text(
                                 driver.fullName,
                                 style: TextStyle(
-                                  color: isBusy
+                                  color: (isBusy && !isAdmin)
                                       ? AppTheme.textHint
                                       : AppTheme.textPrimary,
                                 ),
                               ),
                               subtitle: isBusy
-                                  ? const Text(
-                                      'Already booked at this time',
+                                  ? Text(
+                                      isAdmin
+                                          ? '⚠️ Has another job at this time (override allowed)'
+                                          : 'Already booked at this time',
                                       style: TextStyle(
                                         fontSize: 11,
-                                        color: AppTheme.errorColor,
+                                        color: isAdmin
+                                            ? AppTheme.warningColor
+                                            : AppTheme.errorColor,
                                       ),
                                     )
                                   : null,
@@ -652,12 +924,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     final auth = context.watch<AuthProvider>();
     final statusColor = AppTheme.getStatusColor(_job.currentStatus);
     final nextStatuses = _getNextStatuses(_job.currentStatus, auth);
-    final hasVehicle = _job.isAssigned;
+    final hasVehicle = _job.vehicleId != null;
 
     final canAssign = auth.hasPermission('assignments:create');
     final canSwap = auth.isAdmin;
-    final canManageDrivers = canAssign; // same gate: admin + scheduler
+    final canManageDrivers =
+        auth.isAdmin; // admin only — reassignment on existing jobs
     final canUpdateStatus = auth.hasPermission('jobs:updateStatus');
+    // hasVehicle must reflect whether a vehicle is physically attached,
+    // NOT the status string — after unassign the status reverts to pending
+    // but vehicleId is null, so isAssigned would be wrong here.
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -923,6 +1199,26 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               ),
                             ),
                           ],
+                          // Admin: quick-remove button
+                          if (auth.isAdmin && _job.isActive) ...[
+                            const Spacer(),
+                            GestureDetector(
+                              onTap: () =>
+                                  _unassignDriver(tech.id, tech.fullName),
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.errorColor.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Icon(
+                                  Icons.person_remove_outlined,
+                                  size: 14,
+                                  color: AppTheme.errorColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     );
@@ -968,6 +1264,17 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   label: 'Swap Vehicle',
                   color: AppTheme.warningColor,
                   onPressed: () => _showVehicleDialog(isSwap: true),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              // REMOVE VEHICLE — admin only
+              if (auth.isAdmin && hasVehicle) ...[
+                _actionButton(
+                  icon: Icons.remove_circle_outline,
+                  label: 'Remove Vehicle',
+                  color: AppTheme.errorColor,
+                  onPressed: _unassignVehicle,
                 ),
                 const SizedBox(height: 12),
               ],

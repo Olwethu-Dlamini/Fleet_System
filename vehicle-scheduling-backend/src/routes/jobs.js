@@ -165,7 +165,9 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
       ? technician_ids.map(Number).filter(Boolean)
       : [];
 
-    await Job.assignTechnicians(jobId, techIds, parseInt(assigned_by));
+    // Admin can force-assign drivers even if they have a conflicting job.
+    const isAdminOverride = req.user.role === 'admin';
+    await Job.assignTechnicians(jobId, techIds, parseInt(assigned_by), isAdminOverride);
 
     const updated = await Job.getJobById(jobId);
     res.json({
@@ -320,6 +322,61 @@ router.put('/:id/schedule', verifyToken, async (req, res) => {
       message: 'Server error',
       error  : error.message,
     });
+  }
+});
+
+
+// ==========================================
+// DELETE /api/jobs/:id/vehicle  — admin only
+// Removes the vehicle assignment from a job.
+// If the job was 'assigned', it reverts to 'pending'.
+// ==========================================
+router.delete('/:id/vehicle', verifyToken, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({
+      success: false,
+      message: 'Only administrators can remove vehicle assignments',
+    });
+  }
+
+  try {
+    const jobId = parseInt(req.params.id);
+    if (isNaN(jobId)) {
+      return res.status(400).json({ success: false, message: 'Invalid job ID' });
+    }
+
+    const job = await Job.getJobById(jobId);
+    if (!job) {
+      return res.status(404).json({ success: false, message: 'Job not found' });
+    }
+
+    // Remove the vehicle assignment row
+    await db.query('DELETE FROM job_assignments WHERE job_id = ?', [jobId]);
+
+    // Revert status from 'assigned' → 'pending' so the job is re-schedulable
+    await db.query(
+      `UPDATE jobs
+       SET current_status = 'pending', updated_at = NOW()
+       WHERE id = ? AND current_status = 'assigned'`,
+      [jobId]
+    );
+
+    // Log the status change
+    await db.query(
+      `INSERT INTO job_status_history (job_id, status, changed_by, reason, created_at)
+       VALUES (?, 'pending', ?, 'Vehicle unassigned by admin', NOW())`,
+      [jobId, req.user.id]
+    ).catch(() => {}); // non-fatal if history table not present
+
+    const updated = await Job.getJobById(jobId);
+    res.json({
+      success: true,
+      message: 'Vehicle unassigned. Job reverted to Pending.',
+      job: updated,
+    });
+  } catch (error) {
+    console.error('DELETE /jobs/:id/vehicle error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 

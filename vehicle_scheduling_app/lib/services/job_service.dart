@@ -253,6 +253,29 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
+  // UNASSIGN VEHICLE  (admin only)
+  // DELETE /api/jobs/:jobId/vehicle
+  // Removes the vehicle from the job and reverts status to pending.
+  // ══════════════════════════════════════════════════════════
+  Future<void> unassignVehicle({required int jobId}) async {
+    try {
+      final response = await apiService.delete(
+        '${AppConfig.jobsEndpoint}/$jobId/vehicle',
+      );
+      if (response['success'] != true) {
+        throw Exception(
+          response['message'] ??
+              response['error'] ??
+              'Failed to remove vehicle',
+        );
+      }
+    } catch (e) {
+      print('JobService.unassignVehicle error: $e');
+      rethrow;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
   // UPDATE JOB STATUS
   // ══════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> updateJobStatus({

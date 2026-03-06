@@ -4,6 +4,7 @@
 // ROLES: admin | scheduler | technician
 // CHANGES:
 //   • Admin gets a 5th tab: Users (people icon)
+//   • Admin gets a 6th tab: Reports (bar chart icon)
 //   • Scheduler/technician tabs unchanged
 // ============================================
 
@@ -19,7 +20,8 @@ import 'package:vehicle_scheduling_app/screens/jobs/jobs_list_screen.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/create_job_screen.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/scheduler_screen.dart';
 import 'package:vehicle_scheduling_app/screens/vehicles/vehicles_list_screen.dart';
-import 'package:vehicle_scheduling_app/screens/users/users_screen.dart'; // ← NEW
+import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
+import 'package:vehicle_scheduling_app/screens/reports/reports_screen.dart'; // ← NEW
 
 void main() {
   runApp(
@@ -103,7 +105,7 @@ class _AuthGateState extends State<AuthGate> {
 //
 // Tab layout per role:
 //
-//   admin      → Dashboard | Jobs | Vehicles | Schedule | Users
+//   admin      → Dashboard | Jobs | Vehicles | Schedule | Users | Reports
 //   scheduler  → Dashboard | Jobs | Vehicles | Schedule
 //   technician → Dashboard | My Jobs
 // ============================================
@@ -154,7 +156,8 @@ class _MainAppState extends State<MainApp> {
         const JobsListScreen(), // 1
         const VehiclesListScreen(), // 2
         const SchedulerScreen(), // 3
-        const UsersScreen(), // 4  ← admin only
+        const UsersScreen(), // 4
+        const ReportsScreen(), // 5  ← NEW
       ];
     }
 
@@ -209,15 +212,20 @@ class _MainAppState extends State<MainApp> {
           label: 'Schedule',
         ),
         BottomNavigationBarItem(
-          // ← NEW admin tab
           icon: Icon(Icons.people_outline),
           activeIcon: Icon(Icons.people),
           label: 'Users',
         ),
+        BottomNavigationBarItem(
+          // ← NEW
+          icon: Icon(Icons.bar_chart_outlined),
+          activeIcon: Icon(Icons.bar_chart),
+          label: 'Reports',
+        ),
       ];
     }
 
-    // Scheduler — no Users tab
+    // Scheduler — no Users or Reports tab
     return const [
       BottomNavigationBarItem(
         icon: Icon(Icons.dashboard_outlined),
@@ -247,6 +255,7 @@ class _MainAppState extends State<MainApp> {
   // Jobs tab (index 1) for admin/scheduler → New Job
   // Schedule tab (index 3)                 → SchedulerScreen owns its own FAB
   // Users tab (index 4, admin)             → no FAB here; UsersScreen has its own
+  // Reports tab (index 5, admin)           → no FAB
   // Technician                             → no FAB
   // ==========================================
   Widget? _buildFab(AuthProvider auth, int currentIndex) {

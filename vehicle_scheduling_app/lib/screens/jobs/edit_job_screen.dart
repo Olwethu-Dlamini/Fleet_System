@@ -55,17 +55,15 @@ class _EditJobScreenState extends State<EditJobScreen> {
       text: j.estimatedDurationMinutes.toString(),
     );
 
-    // Sanitize — value must exactly match a dropdown item
-    const validJobTypes = ['installation', 'delivery', 'Miscellenous'];
+    // FIX 1: 'miscellaneous' — lowercase, correctly spelled to match DB/backend
+    const validJobTypes = ['installation', 'delivery', 'miscellaneous'];
     _jobType = validJobTypes.contains(j.jobType) ? j.jobType : 'installation';
 
     const validPriorities = ['low', 'normal', 'high', 'urgent'];
     _priority = validPriorities.contains(j.priority) ? j.priority : 'normal';
 
-    // scheduledDate is already a DateTime in the Job model — use directly
     _scheduledDate = j.scheduledDate;
 
-    // Parse times — stored as "HH:MM:SS"
     _scheduledTimeStart = _parseTime(j.scheduledTimeStart);
     _scheduledTimeEnd = _parseTime(j.scheduledTimeEnd);
   }
@@ -125,10 +123,13 @@ class _EditJobScreenState extends State<EditJobScreen> {
 
   Future<void> _pickDate() async {
     final today = DateTime.now();
+    // FIX 2: firstDate allows the job's own existing date so past-dated jobs
+    // can still be edited without being forced to pick a future date.
+    final earliest = _scheduledDate.isBefore(today) ? _scheduledDate : today;
     final picked = await showDatePicker(
       context: context,
       initialDate: _scheduledDate,
-      firstDate: today,
+      firstDate: earliest,
       lastDate: today.add(const Duration(days: 365)),
     );
     if (picked != null) setState(() => _scheduledDate = picked);
@@ -190,7 +191,6 @@ class _EditJobScreenState extends State<EditJobScreen> {
 
       if (!mounted) return;
 
-      // Reload jobs so the list reflects the change
       final auth = context.read<AuthProvider>();
       final jobProvider = context.read<JobProvider>();
       if (auth.isTechnician) {
@@ -200,8 +200,11 @@ class _EditJobScreenState extends State<EditJobScreen> {
       }
 
       if (!mounted) return;
+      // FIX 3: reset _saving before popping so the button isn't stuck if pop
+      // is somehow deferred or the widget stays in the tree.
+      setState(() => _saving = false);
       _showSnack('Job updated successfully!');
-      Navigator.pop(context, true); // return true = refreshed
+      Navigator.pop(context, true);
     } catch (e) {
       if (mounted) {
         setState(() => _saving = false);
@@ -210,10 +213,6 @@ class _EditJobScreenState extends State<EditJobScreen> {
     }
   }
 
-  // ── Parse backend conflict errors ────────────────────────────────────
-  // edit_job_screen only edits schedule fields, not drivers, but a time
-  // change can still produce a driver conflict if the new window overlaps
-  // with one of the assigned drivers' other jobs.
   void _handleAssignmentError(String error) {
     final isDriverConflict =
         error.toLowerCase().contains('driver scheduling conflict') ||
@@ -233,7 +232,6 @@ class _EditJobScreenState extends State<EditJobScreen> {
     }
   }
 
-  // ── Detailed conflict dialog ──────────────────────────────────────────
   void _showConflictDialog({
     required String title,
     required IconData icon,
@@ -272,47 +270,56 @@ class _EditJobScreenState extends State<EditJobScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'The new time window conflicts with an existing assignment '
-              'for the following driver(s):',
-              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            // FIX 4: if no structured conflict lines, fall back to showing
+            // the raw message so the dialog is never empty/misleading.
+            Text(
+              conflictLines.isEmpty
+                  ? rawMessage
+                  : 'The new time window conflicts with an existing assignment '
+                        'for the following driver(s):',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
             ),
-            const SizedBox(height: 12),
-            ...conflictLines.map(
-              (line) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorColor.withOpacity(0.07),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppTheme.errorColor.withOpacity(0.25),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        size: 15,
-                        color: AppTheme.errorColor,
+            if (conflictLines.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...conflictLines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.errorColor.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.errorColor.withOpacity(0.25),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          line.trim().replaceFirst('•', '').trim(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 15,
+                          color: AppTheme.errorColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            line.trim().replaceFirst('•', '').trim(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: 4),
             Text(
               hint,
@@ -348,7 +355,6 @@ class _EditJobScreenState extends State<EditJobScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
-    // Guard: only admin + scheduler
     if (!auth.hasPermission('jobs:create')) {
       return Scaffold(
         appBar: AppBar(title: const Text('Edit Job')),
@@ -444,9 +450,10 @@ class _EditJobScreenState extends State<EditJobScreen> {
                     child: Text('Installation'),
                   ),
                   DropdownMenuItem(value: 'delivery', child: Text('Delivery')),
+                  // FIX 1: corrected spelling + lowercase to match backend
                   DropdownMenuItem(
-                    value: 'Miscellenous',
-                    child: Text('Miscellenous'),
+                    value: 'miscellaneous',
+                    child: Text('Miscellaneous'),
                   ),
                 ],
                 onChanged: (v) => setState(() => _jobType = v!),

@@ -19,6 +19,7 @@ class AppTheme {
   static const Color infoColor = Color(0xFF2196F3); // Blue
 
   static const Color backgroundColor = Color(0xFFF5F5F5);
+  static const Color backgroundLight = backgroundColor; // alias
   static const Color surfaceColor = Color(0xFFFFFFFF);
   static const Color dividerColor = Color(0xFFE0E0E0);
 

@@ -328,6 +328,25 @@ class JobProvider extends ChangeNotifier {
   }
 
   // ==========================================
+  // UNASSIGN VEHICLE  (admin only)
+  // Removes the vehicle assignment from a job.
+  // Job reverts to 'pending' on the backend if it was 'assigned'.
+  // ==========================================
+  Future<bool> unassignVehicle({required int jobId}) async {
+    _error = null;
+
+    try {
+      await _jobService.unassignVehicle(jobId: jobId);
+      await _reloadSingleJob(jobId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ==========================================
   // FILTERS
   // ==========================================
   void setStatusFilter(String? status) {

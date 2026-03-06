@@ -266,6 +266,15 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _scheduledDate = picked;
         _dateError = _validateDate(picked);
       });
+      // FIX 4: re-check which drivers are busy on the newly selected date
+      _fetchBusyDriverIds().then((busyIds) {
+        if (mounted) {
+          setState(() {
+            _busyDriverIds = busyIds;
+            _selectedDriverIds.removeAll(busyIds);
+          });
+        }
+      });
     }
   }
 
@@ -275,6 +284,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       initialTime: isStart ? _scheduledTimeStart : _scheduledTimeEnd,
     );
     if (picked != null) {
+      // FIX 2: setState only updates synchronous state; _onTimeChanged()
+      // triggers an async fetch that calls setState itself — calling it inside
+      // the outer setState causes a nested-setState assertion in debug mode.
       setState(() {
         if (isStart) {
           _scheduledTimeStart = picked;
@@ -287,8 +299,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         }
         _timeError = _validateTimeOrder(_scheduledTimeStart, _scheduledTimeEnd);
         _vehicleError = null;
-        _onTimeChanged(); // recalculate duration + refresh driver availability
       });
+      _onTimeChanged(); // recalculate duration + refresh driver availability
     }
   }
 
@@ -345,7 +357,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     if (!created) {
       _handleAssignmentError(
         jobProvider.error ?? 'Failed to create job',
-        context: 'create',
+        errorContext: 'create',
       );
       return;
     }
@@ -355,9 +367,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     String? vehicleError;
 
     if (_selectedVehicleId != null) {
-      final newJob = jobProvider.allJobs.isNotEmpty
-          ? jobProvider.allJobs.first
-          : null;
+      // FIX 1: allJobs.first is unreliable — the list ordering isn't guaranteed
+      // to put the newest job first. Sort by ID descending to get the job with
+      // the highest ID, which is the one just created.
+      final sortedJobs = [...jobProvider.allJobs]
+        ..sort((a, b) => b.id.compareTo(a.id));
+      final newJob = sortedJobs.isNotEmpty ? sortedJobs.first : null;
 
       if (newJob == null) {
         vehicleResult = 'fail';
@@ -384,7 +399,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               vehicleError.toLowerCase().contains('conflict') ||
               vehicleError.toLowerCase().contains('already booked');
           if (isConflict) {
-            _handleAssignmentError(vehicleError, context: 'assign');
+            _handleAssignmentError(vehicleError, errorContext: 'assign');
             return; // stay on screen so user can pick a different vehicle
           }
         }
@@ -524,7 +539,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   //   1. Driver conflict  → refresh busy chips + show detail dialog
   //   2. Vehicle conflict → highlight vehicle field + snackbar hint
   //   3. Everything else  → plain snackbar
-  void _handleAssignmentError(String error, {required String context}) {
+  void _handleAssignmentError(String error, {required String errorContext}) {
     final isDriverConflict =
         error.toLowerCase().contains('driver scheduling conflict') ||
         error.toLowerCase().contains('already assigned to');
@@ -554,12 +569,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       );
     } else if (isVehicleConflict) {
       setState(
-        () => _vehicleError = context == 'assign'
+        () => _vehicleError = errorContext == 'assign'
             ? 'Vehicle has a conflicting job at this time'
             : 'This time slot is already booked for the selected vehicle',
       );
       _showSnack(
-        context == 'assign'
+        errorContext == 'assign'
             ? '⚠️ Job created but vehicle is booked at this time. Assign from job details.'
             : '⚠️ Vehicle is booked at this time. Choose a different vehicle or reschedule.',
         isError: true,
@@ -615,47 +630,56 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'The following drivers are already assigned to another job '
-              'during this time window:',
-              style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+            // FIX 3: fall back to rawMessage if no structured bullet lines
+            // so the dialog is never blank/misleading
+            Text(
+              conflictLines.isEmpty
+                  ? rawMessage
+                  : 'The following drivers are already assigned to another job '
+                        'during this time window:',
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary,
+              ),
             ),
-            const SizedBox(height: 12),
-            ...conflictLines.map(
-              (line) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.errorColor.withOpacity(0.07),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: AppTheme.errorColor.withOpacity(0.25),
-                    ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        size: 15,
-                        color: AppTheme.errorColor,
+            if (conflictLines.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              ...conflictLines.map(
+                (line) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.errorColor.withOpacity(0.07),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: AppTheme.errorColor.withOpacity(0.25),
                       ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          line.trim().replaceFirst('•', '').trim(),
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.textPrimary,
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.warning_amber_rounded,
+                          size: 15,
+                          color: AppTheme.errorColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            line.trim().replaceFirst('•', '').trim(),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textPrimary,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
             const SizedBox(height: 4),
             Text(
               hint,
