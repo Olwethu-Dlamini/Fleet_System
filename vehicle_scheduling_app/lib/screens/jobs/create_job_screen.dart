@@ -1,26 +1,39 @@
 // ============================================
 // FILE: lib/screens/jobs/create_job_screen.dart
-// PURPOSE: Form to create a new job
-// CHANGES:
-//   • Added "Assign Drivers" section — fetches technician/driver users
-//     from GET /api/users?role=technician and renders a multi-select
-//     chip list so one or more drivers can be assigned at creation time.
-//   • technicianIds list is passed through to jobProvider.createJob()
-//     which already supports it (no provider changes needed).
-// ACCESS: admin + scheduler only (jobs:create permission)
+//
+// FIX (Bug 1): Driver assignment now works correctly after job creation.
+//
+// THE PROBLEM:
+//   The old code passed technicianIds into jobProvider.createJob(), which
+//   sent them in the POST /api/jobs body. The backend ignores that field —
+//   it only creates the job record. So drivers were "selected" in the UI
+//   but never actually written to the job_technicians DB table.
+//   The success dialog said "2 drivers assigned" just because techIds.length
+//   was > 0, without any confirmation from the server.
+//
+// THE FIX:
+//   1. jobProvider.createJob() now returns Job? instead of bool.
+//      We get the real new job object (with its database ID) back.
+//   2. After the job is created, we call jobProvider.assignTechnicians()
+//      separately with the confirmed job ID. This hits the dedicated
+//      PUT /api/job-assignments/:jobId/technicians endpoint which
+//      actually writes to job_technicians.
+//   3. The summary dialog now only shows "drivers assigned" if the
+//      assignTechnicians() call ACTUALLY SUCCEEDED (not just because
+//      the user selected some chips).
 // ============================================
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vehicle_scheduling_app/config/app_config.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
+import 'package:vehicle_scheduling_app/models/job.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/models/vehicle.dart';
 import 'package:vehicle_scheduling_app/services/user_service.dart';
 
-// ── Lightweight row model for the job-creation summary dialog ──────
 class _SummaryRow {
   final IconData icon;
   final Color color;
@@ -32,7 +45,6 @@ class _SummaryRow {
   });
 }
 
-// ── Lightweight model for a selectable driver/technician ──
 class _DriverOption {
   final int id;
   final String fullName;
@@ -81,11 +93,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   String? _timeError;
   String? _vehicleError;
 
-  // ── Driver selection state ──────────────────────────────
   List<_DriverOption> _availableDrivers = [];
   final Set<int> _selectedDriverIds = {};
-  // Drivers already booked during the selected time window.
-  // Rendered greyed-out/disabled so the scheduler cannot pick them.
   Set<int> _busyDriverIds = {};
   bool _driversLoading = false;
   String? _driversError;
@@ -120,7 +129,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     });
   }
 
-  // ── Load all drivers, then mark which are busy for the chosen time ──
   Future<void> _loadDrivers() async {
     setState(() {
       _driversLoading = true;
@@ -137,25 +145,24 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         setState(() {
           _availableDrivers = allDrivers;
           _busyDriverIds = busyIds;
-          _selectedDriverIds.removeAll(busyIds); // deselect any now-busy driver
+          _selectedDriverIds.removeAll(busyIds);
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _driversError = 'Could not load drivers';
         });
+      }
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _driversLoading = false;
         });
+      }
     }
   }
 
-  // ── Query GET /api/availability/drivers for the current time window ──
-  // Falls back to empty set on any network error — the server-side
-  // checkDriversAvailability() guard is still the authoritative check.
   Future<Set<int>> _fetchBusyDriverIds({int? excludeJobId}) async {
     try {
       final dateStr = _formatDate(_scheduledDate);
@@ -172,15 +179,10 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         final busyList = response['busy'] as List<dynamic>? ?? [];
         return busyList.map<int>((d) => (d['id'] as num).toInt()).toSet();
       }
-    } catch (_) {
-      // Network error — degrade gracefully, server will still enforce
-    }
+    } catch (_) {}
     return {};
   }
 
-  // ── Re-check driver availability whenever date/time changes ──────────
-  // Called from _pickTime so the chip picker always reflects the
-  // currently selected window before the user submits.
   void _onTimeChanged() {
     _updateDurationFromTimes();
     _fetchBusyDriverIds().then((busyIds) {
@@ -266,7 +268,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _scheduledDate = picked;
         _dateError = _validateDate(picked);
       });
-      // FIX 4: re-check which drivers are busy on the newly selected date
       _fetchBusyDriverIds().then((busyIds) {
         if (mounted) {
           setState(() {
@@ -284,9 +285,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       initialTime: isStart ? _scheduledTimeStart : _scheduledTimeEnd,
     );
     if (picked != null) {
-      // FIX 2: setState only updates synchronous state; _onTimeChanged()
-      // triggers an async fetch that calls setState itself — calling it inside
-      // the outer setState causes a nested-setState assertion in debug mode.
       setState(() {
         if (isStart) {
           _scheduledTimeStart = picked;
@@ -300,10 +298,27 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         _timeError = _validateTimeOrder(_scheduledTimeStart, _scheduledTimeEnd);
         _vehicleError = null;
       });
-      _onTimeChanged(); // recalculate duration + refresh driver availability
+      _onTimeChanged();
     }
   }
 
+  // ══════════════════════════════════════════════════════════
+  // SUBMIT
+  //
+  // FIX (Bug 1): The critical change is in this method.
+  //
+  // OLD flow:
+  //   createJob(technicianIds: techIds) → bool
+  //   // techIds were passed to the job creation POST — silently ignored
+  //   // by backend, drivers never actually saved.
+  //
+  // NEW flow:
+  //   1. createJob() → Job?  (no technicianIds in the POST)
+  //   2. if newJob != null && vehicleId selected → assignJob(newJob.id)
+  //   3. if newJob != null && techIds selected  → assignTechnicians(newJob.id)
+  //      This is the DEDICATED PUT endpoint that actually writes to DB.
+  //   4. Show summary dialog reflecting actual outcomes.
+  // ══════════════════════════════════════════════════════════
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -333,7 +348,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
     final techIds = _selectedDriverIds.toList();
 
-    final created = await jobProvider.createJob(
+    // ── STEP 1: Create the job ─────────────────────────────────────
+    // createJob() now returns Job? — null means it failed.
+    final newJob = await jobProvider.createJob(
       customerName: _customerNameController.text.trim(),
       customerPhone: _customerPhoneController.text.trim().isEmpty
           ? null
@@ -349,12 +366,12 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       estimatedDurationMinutes: int.tryParse(_durationController.text) ?? 60,
       priority: _priority,
       createdBy: auth.user?.id ?? AppConfig.defaultUserId,
-      technicianIds: techIds, // ← pass selected drivers
+      // NOTE: No technicianIds here. We handle it in step 3 below.
     );
 
     if (!mounted) return;
 
-    if (!created) {
+    if (newJob == null) {
       _handleAssignmentError(
         jobProvider.error ?? 'Failed to create job',
         errorContext: 'create',
@@ -362,73 +379,80 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       return;
     }
 
-    // ── Job was created — now handle optional vehicle + driver assignment ──
-    String? vehicleResult; // null = no vehicle chosen, 'ok', 'fail'
+    // ── STEP 2: Assign vehicle (optional) ──────────────────────────
+    String? vehicleResult;
     String? vehicleError;
 
     if (_selectedVehicleId != null) {
-      // FIX 1: allJobs.first is unreliable — the list ordering isn't guaranteed
-      // to put the newest job first. Sort by ID descending to get the job with
-      // the highest ID, which is the one just created.
-      final sortedJobs = [...jobProvider.allJobs]
-        ..sort((a, b) => b.id.compareTo(a.id));
-      final newJob = sortedJobs.isNotEmpty ? sortedJobs.first : null;
+      final assigned = await jobProvider.assignJob(
+        jobId: newJob.id, // ← Safe: we have the real ID from the DB
+        vehicleId: _selectedVehicleId!,
+        assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+      );
 
-      if (newJob == null) {
-        vehicleResult = 'fail';
-        vehicleError =
-            'Could not find the new job to assign vehicle. Assign from Job Details.';
+      if (!mounted) return;
+
+      if (assigned) {
+        vehicleResult = 'ok';
       } else {
-        final assigned = await jobProvider.assignJob(
-          jobId: newJob.id,
-          vehicleId: _selectedVehicleId!,
-          assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
-        );
+        vehicleResult = 'fail';
+        vehicleError = jobProvider.error ?? 'Vehicle assignment failed';
 
-        if (!mounted) return;
-
-        if (assigned) {
-          vehicleResult = 'ok';
-        } else {
-          vehicleResult = 'fail';
-          vehicleError = jobProvider.error ?? 'Vehicle assignment failed';
-
-          // If it's a conflict error, show the detailed dialog and stay on screen
-          final isConflict =
-              vehicleError!.contains('409') ||
-              vehicleError.toLowerCase().contains('conflict') ||
-              vehicleError.toLowerCase().contains('already booked');
-          if (isConflict) {
-            _handleAssignmentError(vehicleError, errorContext: 'assign');
-            return; // stay on screen so user can pick a different vehicle
-          }
+        final isConflict =
+            vehicleError!.contains('409') ||
+            vehicleError.toLowerCase().contains('conflict') ||
+            vehicleError.toLowerCase().contains('already booked');
+        if (isConflict) {
+          _handleAssignmentError(vehicleError, errorContext: 'assign');
+          return;
         }
       }
     }
 
     if (!mounted) return;
 
-    // ── Show creation summary dialog then pop ────────────────────────────
+    // ── STEP 3: Assign drivers via the dedicated endpoint ──────────
+    // This is the fix. We call assignTechnicians() with the real job ID.
+    // The old code sent technicianIds in the createJob POST body which
+    // the backend silently ignored. Now we use the correct PUT endpoint.
+    int actualDriversAssigned = 0;
+    String? driversError;
+
+    if (techIds.isNotEmpty) {
+      final driversAssigned = await jobProvider.assignTechnicians(
+        jobId: newJob.id,
+        technicianIds: techIds,
+        assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+        // No forceOverride on create — drivers were pre-filtered as available
+      );
+
+      if (!mounted) return;
+
+      if (driversAssigned) {
+        actualDriversAssigned = techIds.length;
+      } else {
+        driversError = jobProvider.error ?? 'Driver assignment failed';
+        // Don't abort — job was created successfully, just show the warning
+      }
+    }
+
+    if (!mounted) return;
+
     await _showCreationSummaryDialog(
-      techCount: techIds.length,
+      techCount: actualDriversAssigned, // ← Now reflects actual server result
       vehicleResult: vehicleResult,
       vehicleError: vehicleError,
+      driversError: driversError,
     );
 
     if (mounted) Navigator.pop(context);
   }
 
-  // ── Summary dialog shown after successful job creation ────────────────
-  // Clearly tells the scheduler:
-  //   ✅ Job created
-  //   ✅ / ⚠️  Vehicle status
-  //   ✅ / —   Drivers status
-  // If vehicle assignment failed (non-conflict), the dialog explains
-  // the user can reassign from Job Details.
   Future<void> _showCreationSummaryDialog({
     required int techCount,
-    required String? vehicleResult, // null | 'ok' | 'fail'
+    required String? vehicleResult,
     required String? vehicleError,
+    String? driversError,
   }) async {
     final rows = <_SummaryRow>[
       const _SummaryRow(
@@ -458,7 +482,15 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       );
     }
 
-    if (techCount > 0) {
+    if (driversError != null) {
+      rows.add(
+        _SummaryRow(
+          icon: Icons.warning_amber_rounded,
+          color: AppTheme.warningColor,
+          text: 'Driver assignment failed — assign from Job Details',
+        ),
+      );
+    } else if (techCount > 0) {
       rows.add(
         _SummaryRow(
           icon: Icons.group,
@@ -530,15 +562,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     );
   }
 
-  // ── Parse backend conflict errors into the right UI feedback ────────
-  //
-  // The backend throws structured messages such as:
-  //   "Driver scheduling conflict:\n   • John already assigned to: JOB-001 (09:00 - 11:00)"
-  //
-  // Three cases:
-  //   1. Driver conflict  → refresh busy chips + show detail dialog
-  //   2. Vehicle conflict → highlight vehicle field + snackbar hint
-  //   3. Everything else  → plain snackbar
   void _handleAssignmentError(String error, {required String errorContext}) {
     final isDriverConflict =
         error.toLowerCase().contains('driver scheduling conflict') ||
@@ -552,7 +575,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
         error.toLowerCase().contains('time conflict detected');
 
     if (isDriverConflict) {
-      // Refresh chip picker so newly-busy drivers are greyed out
       _fetchBusyDriverIds().then((busyIds) {
         if (mounted) {
           setState(() {
@@ -589,9 +611,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     }
   }
 
-  // ── Detailed conflict dialog ──────────────────────────────────────────
-  // Parses bullet-point lines from the backend error message and renders
-  // each one as a card so the scheduler can see exactly what to fix.
   void _showConflictDialog({
     required String title,
     required IconData icon,
@@ -630,8 +649,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // FIX 3: fall back to rawMessage if no structured bullet lines
-            // so the dialog is never blank/misleading
             Text(
               conflictLines.isEmpty
                   ? rawMessage
@@ -752,7 +769,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── CUSTOMER ────────────────────────────────────────────
               _sectionTitle('Customer Details'),
               const SizedBox(height: 12),
               _buildTextField(
@@ -782,7 +798,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── JOB DETAILS ─────────────────────────────────────────
               _sectionTitle('Job Details'),
               const SizedBox(height: 12),
               _buildDropdown<String>(
@@ -824,7 +839,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── SCHEDULE ────────────────────────────────────────────
               _sectionTitle('Schedule'),
               const SizedBox(height: 12),
               _buildTappableField(
@@ -886,7 +900,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               ),
               const SizedBox(height: 24),
 
-              // ── VEHICLE ─────────────────────────────────────────────
               _sectionTitle('Vehicle (Optional)'),
               const SizedBox(height: 12),
               if (vehicleProvider.isLoading)
@@ -923,7 +936,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 ),
               const SizedBox(height: 24),
 
-              // ── ASSIGN DRIVERS ──────────────────────────────────────
               Row(
                 children: [
                   Expanded(child: _sectionTitle('Assign Drivers (Optional)')),
@@ -946,7 +958,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
               _buildDriverSelector(),
               const SizedBox(height: 32),
 
-              // ── SUBMIT ──────────────────────────────────────────────
               SizedBox(
                 width: double.infinity,
                 height: 52,
@@ -979,7 +990,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     );
   }
 
-  // ── Driver multi-select chip list ──────────────────────────────────────────
   Widget _buildDriverSelector() {
     if (_driversLoading) {
       return const Center(child: CircularProgressIndicator());
@@ -1024,15 +1034,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: AppTheme.dividerColor),
         ),
-        child: Row(
+        child: const Row(
           children: [
-            const Icon(
-              Icons.person_off_outlined,
-              color: AppTheme.textHint,
-              size: 18,
-            ),
-            const SizedBox(width: 10),
-            const Text(
+            Icon(Icons.person_off_outlined, color: AppTheme.textHint, size: 18),
+            SizedBox(width: 10),
+            Text(
               'No drivers available.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
@@ -1051,7 +1057,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Summary line
           if (_selectedDriverIds.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 10),
@@ -1093,10 +1098,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 style: TextStyle(fontSize: 12, color: AppTheme.textHint),
               ),
             ),
-
-          // Driver chips — busy drivers are shown greyed-out and disabled.
-          // The "Already booked" label and 0.45 opacity make it instantly
-          // obvious why a driver cannot be selected.
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -1166,7 +1167,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                     selected: selected && !isBusy,
                     showCheckmark: false,
                     onSelected: isBusy
-                        ? null // disabled — cannot select a busy driver
+                        ? null
                         : (val) => setState(() {
                             if (val) {
                               _selectedDriverIds.add(driver.id);
@@ -1197,8 +1198,6 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       ),
     );
   }
-
-  // ── Widget helpers ─────────────────────────────────────────────────────────
 
   Widget _buildVehicleDropdown(List<Vehicle> vehicles) {
     return Container(

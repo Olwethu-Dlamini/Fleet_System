@@ -1,21 +1,31 @@
 // ============================================
 // FILE: lib/screens/jobs/job_detail_screen.dart
-// PURPOSE: View job details + update status + assign/swap vehicle
 //
-// CHANGES:
-//   • Assignment card now lists all technicians from job.technicians
-//     (replaces single driverName row).
-//   • Drivers see their own job detail without confusion — their name
-//     is highlighted in the technicians list.
-//   • Admin / Scheduler: new "Manage Drivers" button opens a dialog
-//     to replace the technician list, calling assignTechnicians().
-//   • Drivers fetched from GET /api/users?role=technician in the
-//     Manage Drivers dialog.
+// FIXES APPLIED:
 //
-// Permission matrix:
-//   admin      → assign/swap vehicle, manage drivers, update status
-//   scheduler  → assign vehicle (no swap), manage drivers, update status
-//   technician → update status only (in_progress → completed/cancelled)
+// BUG 2 — False error after assigning driver from detail screen:
+//   The old code called assignTechnicians() then immediately called
+//   loadJobById() again. assignTechnicians() in the provider already
+//   calls _reloadSingleJob() internally and updates selectedJob.
+//   The redundant loadJobById() set status=loading, notified listeners,
+//   set status=success, notified again — causing a double rebuild race.
+//   On slower devices this meant the screen read selectedJob BEFORE the
+//   second load finished, getting stale data, and the error state from
+//   the internal reload was sometimes surfaced incorrectly.
+//   FIX: Removed all manual loadJobById() calls after assignTechnicians()
+//   and assignJob() succeed. Just read selectedJob directly.
+//
+// BUG 3 — Admin override does nothing:
+//   The "Manage Drivers" dialog let admins check busy drivers, but the
+//   call to assignTechnicians() passed no forceOverride flag.
+//   The backend rejected it with the same conflict error as a normal user.
+//   FIX: The dialog now pops with { ids: [...], force: bool } instead of
+//   just a List<int>. When isAdmin is true and the user selected a busy
+//   driver, force=true is passed through to assignTechnicians() which
+//   sends force_override: true to the backend.
+//   The backend (jobs.js) reads req.user.role === 'admin' AND force_override
+//   to skip conflict checking and remove the driver from any conflicting
+//   job before inserting them into this one.
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -29,7 +39,6 @@ import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/edit_job_screen.dart';
 import 'package:vehicle_scheduling_app/services/user_service.dart';
 
-// ── Lightweight driver option for the picker dialog ────────────
 class _DriverOption {
   final int id;
   final String fullName;
@@ -74,8 +83,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
     switch (current) {
       case 'pending':
-        // Cannot move to 'assigned' without a vehicle attached.
-        // Show only 'cancelled' when no vehicle; full options when vehicle present.
         if (_job.vehicleId == null) return ['cancelled'];
         return ['assigned', 'cancelled'];
       case 'assigned':
@@ -90,14 +97,11 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   Future<void> _updateStatus(String newStatus) async {
     final auth = context.read<AuthProvider>();
 
-    // ── When cancelling, require a reason comment before proceeding ──
     String? cancelReason;
     if (newStatus == 'cancelled') {
       cancelReason = await _showCancelReasonDialog();
-      // User dismissed without submitting — abort
       if (cancelReason == null || !mounted) return;
     } else {
-      // For all other status transitions just ask a simple confirm
       final confirm = await showDialog<bool>(
         context: context,
         builder: (_) => AlertDialog(
@@ -124,14 +128,22 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       jobId: _job.id,
       newStatus: newStatus,
       changedBy: auth.user?.id ?? AppConfig.defaultUserId,
-      reason: cancelReason, // null for non-cancel transitions
+      reason: cancelReason,
     );
 
     if (!mounted) return;
 
     if (success) {
-      setState(() => _job = _job.copyWith(currentStatus: newStatus));
-      _showSnack('Status updated to ${newStatus.replaceAll('_', ' ')}');
+      // Use addPostFrameCallback to ensure setState runs after the current
+      // frame completes. updateJobStatus() calls notifyListeners() which can
+      // trigger a rebuild via context.watch<JobProvider>(); if we also call
+      // setState() in the same microtask, Flutter's assertion fires because
+      // the widget tree is being mutated while a frame is already building.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _job = _job.copyWith(currentStatus: newStatus));
+        _showSnack('Status updated to ${newStatus.replaceAll('_', ' ')}');
+      });
     } else {
       _showSnack(
         context.read<JobProvider>().error ?? 'Failed to update status',
@@ -140,12 +152,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
-  // ==========================================
-  // CANCEL REASON DIALOG
-  // Shows a text field requiring the user to enter a reason before
-  // the job status can be changed to 'cancelled'.
-  // Returns the trimmed reason string, or null if the user dismissed.
-  // ==========================================
   Future<String?> _showCancelReasonDialog() async {
     final controller = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -281,8 +287,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   // ==========================================
-  // UNASSIGN DRIVER (admin only)
-  // Removes a single driver from the job without opening the full dialog.
+  // UNASSIGN DRIVER
   // ==========================================
   Future<void> _unassignDriver(int driverId, String driverName) async {
     final confirm = await showDialog<bool>(
@@ -321,12 +326,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       jobId: _job.id,
       technicianIds: remaining,
       assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+      // No forceOverride needed for removal
     );
 
     if (!mounted) return;
 
     if (success) {
-      await context.read<JobProvider>().loadJobById(_job.id);
+      // FIX (Bug 2): Don't call loadJobById() again here.
+      // assignTechnicians() in the provider already called _reloadSingleJob()
+      // which updated selectedJob. Just read it directly.
       final updated = context.read<JobProvider>().selectedJob;
       if (updated != null && mounted) setState(() => _job = updated);
       _showSnack('$driverName removed from job');
@@ -339,9 +347,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   }
 
   // ==========================================
-  // UNASSIGN VEHICLE (admin only)
-  // Removes the vehicle assignment entirely.
-  // Job reverts to pending if it was in assigned state.
+  // UNASSIGN VEHICLE
   // ==========================================
   Future<void> _unassignVehicle() async {
     final confirm = await showDialog<bool>(
@@ -377,7 +383,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (!mounted) return;
 
     if (success) {
-      await context.read<JobProvider>().loadJobById(_job.id);
+      // FIX (Bug 2): Same pattern — unassignVehicle() already reloads.
       final updated = context.read<JobProvider>().selectedJob;
       if (updated != null && mounted) setState(() => _job = updated);
       _showSnack('Vehicle removed. Job is now Pending.');
@@ -478,7 +484,8 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (!mounted) return;
 
     if (success) {
-      await context.read<JobProvider>().loadJobById(_job.id);
+      // FIX (Bug 2): assignJob() internally calls _reloadSingleJob().
+      // No need to call loadJobById() again.
       final updated = context.read<JobProvider>().selectedJob;
       if (updated != null) setState(() => _job = updated);
       _showSnack('Vehicle assigned successfully!');
@@ -535,7 +542,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (!mounted) return;
 
     if (success) {
-      await context.read<JobProvider>().loadJobById(_job.id);
       final updated = context.read<JobProvider>().selectedJob;
       if (updated != null) setState(() => _job = updated);
       _showSnack('Vehicle swapped! ${_job.vehicleName} assigned.');
@@ -549,44 +555,54 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
   // ==========================================
   // MANAGE DRIVERS DIALOG
-  // Opens a multi-select picker; on save calls assignTechnicians().
-  // Drivers already booked at this job's time window are shown
-  // greyed-out and disabled so the scheduler cannot accidentally
-  // double-book them.
+  //
+  // FIX (Bug 3): Dialog now pops with a Map instead of a raw List<int>.
+  //
+  // OLD:  Navigator.pop(ctx, selected.toList())  →  List<int>
+  // NEW:  Navigator.pop(ctx, {'ids': selected.toList(), 'force': isAdmin && selectedBusyDriver})
+  //
+  // The 'force' flag is true when:
+  //   - The logged-in user is an admin, AND
+  //   - At least one of the selected drivers was in the busyIds set
+  //     (meaning the admin deliberately selected a conflicting driver)
+  //
+  // This flag flows to jobProvider.assignTechnicians(forceOverride: force)
+  // → job_service.assignTechnicians(forceOverride: force)
+  // → PUT body includes force_override: true
+  // → jobs.js backend route checks req.user.role === 'admin' && force_override
+  // → calls Job.assignTechnicians(jobId, techIds, assignedBy, isAdminOverride=true)
+  // → backend removes driver from conflicting job, then inserts into this one
   // ==========================================
   Future<void> _showManageDriversDialog() async {
     List<_DriverOption> available = [];
-    // Busy driver IDs for this job's time window (excluding the job itself)
     Set<int> busyIds = {};
     bool loading = true;
 
     final Set<int> selected = Set.from(_job.technicians.map((t) => t.id));
-
     final isAdmin = context.read<AuthProvider>().isAdmin;
 
-    await showDialog(
+    // FIX (Bug 3): Use a typed showDialog so the result is Map<String, dynamic>
+    // not dynamic. The old code used showDialog (untyped) + .then() which is an
+    // anti-pattern when the enclosing function already uses await — .then() runs
+    // after the await resolves, but context and mounted checks inside .then() can
+    // fire after the widget has been disposed. We now await the typed dialog
+    // directly and handle the result inline.
+    final dialogResult = await showDialog<Map<String, dynamic>>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) {
-          // Kick off both loads on first build
           if (loading && available.isEmpty) {
             Future.microtask(() async {
               try {
-                // Load driver list and busy IDs in parallel
-                final dateStr =
-                    _job.formattedDate; // already YYYY-MM-DD-compatible
-                final startStr = _job.scheduledTimeStart;
-                final endStr = _job.scheduledTimeEnd;
-
                 final usersFuture = UserService().getUsers(role: 'technician');
                 final busyFuture = _fetchBusyDriverIds(
                   dateStr:
                       '${_job.scheduledDate.year}'
                       '-${_job.scheduledDate.month.toString().padLeft(2, '0')}'
                       '-${_job.scheduledDate.day.toString().padLeft(2, '0')}',
-                  startStr: startStr,
-                  endStr: endStr,
+                  startStr: _job.scheduledTimeStart,
+                  endStr: _job.scheduledTimeEnd,
                   excludeJobId: _job.id,
                 );
 
@@ -608,15 +624,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           }
 
           return AlertDialog(
-            title: Row(
+            title: const Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.group_outlined,
                   color: AppTheme.primaryColor,
                   size: 20,
                 ),
-                const SizedBox(width: 8),
-                const Text('Manage Drivers'),
+                SizedBox(width: 8),
+                Text('Manage Drivers'),
               ],
             ),
             content: SizedBox(
@@ -636,15 +652,15 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       children: available.map((driver) {
                         final isSelected = selected.contains(driver.id);
                         final isBusy = busyIds.contains(driver.id);
-                        // Admin can select busy drivers (force override);
-                        // schedulers/others cannot.
+                        // Admin can select busy drivers (force override).
+                        // Non-admins cannot.
                         final canSelect = !isBusy || isAdmin;
                         return Opacity(
                           opacity: (isBusy && !isAdmin) ? 0.45 : 1.0,
                           child: Tooltip(
                             message: isBusy
                                 ? isAdmin
-                                      ? '⚠️ Has another job — admin override allowed'
+                                      ? '⚠️ Has another job — admin override will unassign them from it'
                                       : '${driver.fullName} already has a job at this time'
                                 : '',
                             child: CheckboxListTile(
@@ -668,7 +684,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               subtitle: isBusy
                                   ? Text(
                                       isAdmin
-                                          ? '⚠️ Has another job at this time (override allowed)'
+                                          ? '⚠️ Has another job — will be unassigned from it'
                                           : 'Already booked at this time',
                                       style: TextStyle(
                                         fontSize: 11,
@@ -707,6 +723,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             ),
             actions: [
               TextButton(
+                // Cancel — pop with null so dialogResult == null below
                 onPressed: () => Navigator.pop(ctx),
                 child: const Text('Cancel'),
               ),
@@ -717,28 +734,41 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                       ? 'Clear Drivers'
                       : 'Save (${selected.length})',
                 ),
-                onPressed: () => Navigator.pop(ctx, selected.toList()),
+                // Pop with a typed Map. 'force' is true only when the admin
+                // deliberately selected a driver that is in busyIds.
+                onPressed: () => Navigator.pop(ctx, <String, dynamic>{
+                  'ids': selected.toList(),
+                  'force':
+                      isAdmin && selected.any((id) => busyIds.contains(id)),
+                }),
               ),
             ],
           );
         },
       ),
-    ).then((result) async {
-      if (result == null || !mounted) return;
+    );
 
-      final ids = result as List<int>;
+    // Dialog was cancelled or widget was disposed while dialog was open
+    if (dialogResult == null || !mounted) return;
+
+    {
+      final ids = List<int>.from(dialogResult['ids'] as List);
+      final forceOverride = dialogResult['force'] as bool;
+
       final auth = context.read<AuthProvider>();
 
       final success = await context.read<JobProvider>().assignTechnicians(
         jobId: _job.id,
         technicianIds: ids,
         assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+        forceOverride: forceOverride,
       );
 
       if (!mounted) return;
 
       if (success) {
-        await context.read<JobProvider>().loadJobById(_job.id);
+        // FIX (Bug 2): Don't call loadJobById() again.
+        // assignTechnicians() already reloaded selectedJob internally.
         final updated = context.read<JobProvider>().selectedJob;
         if (updated != null && mounted) setState(() => _job = updated);
         _showSnack(
@@ -751,12 +781,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             context.read<JobProvider>().error ?? 'Failed to update drivers';
         _handleDriverConflictError(error);
       }
-    });
+    }
   }
 
-  // ── Fetch busy driver IDs for this job's time window ─────────────────
-  // Falls back to empty set on error — the server-side check in
-  // jobAssignmentService.js is the authoritative guard.
   Future<Set<int>> _fetchBusyDriverIds({
     required String dateStr,
     required String startStr,
@@ -774,13 +801,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         final busyList = response['busy'] as List<dynamic>? ?? [];
         return busyList.map<int>((d) => (d['id'] as num).toInt()).toSet();
       }
-    } catch (_) {
-      // Network error — degrade gracefully
-    }
+    } catch (_) {}
     return {};
   }
 
-  // ── Show conflict dialog when assignTechnicians() rejects ────────────
   void _handleDriverConflictError(String error) {
     final isConflict =
         error.toLowerCase().contains('conflict') ||
@@ -799,7 +823,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     }
   }
 
-  // ── Detailed conflict dialog (shared by vehicle swap + driver assign) ─
   void _showConflictDialog({
     required String title,
     required IconData icon,
@@ -928,19 +951,14 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     final canAssign = auth.hasPermission('assignments:create');
     final canSwap = auth.isAdmin;
-    final canManageDrivers =
-        auth.isAdmin; // admin only — reassignment on existing jobs
+    final canManageDrivers = auth.isAdmin;
     final canUpdateStatus = auth.hasPermission('jobs:updateStatus');
-    // hasVehicle must reflect whether a vehicle is physically attached,
-    // NOT the status string — after unassign the status reverts to pending
-    // but vehicleId is null, so isAssigned would be wrong here.
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: Text(_job.jobNumber),
         actions: [
-          // Edit button — admin + scheduler only
           if (auth.hasPermission('jobs:create'))
             IconButton(
               icon: const Icon(Icons.edit_outlined),
@@ -966,7 +984,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── STATUS BANNER ──────────────────────────────────────
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(16),
@@ -1040,7 +1057,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             ),
             const SizedBox(height: 20),
 
-            // ── CUSTOMER ────────────────────────────────────────────
             _buildCard(
               title: 'Customer',
               icon: Icons.person_outline,
@@ -1053,7 +1069,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             ),
             const SizedBox(height: 12),
 
-            // ── SCHEDULE ────────────────────────────────────────────
             _buildCard(
               title: 'Schedule',
               icon: Icons.calendar_today_outlined,
@@ -1068,12 +1083,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             ),
             const SizedBox(height: 12),
 
-            // ── ASSIGNMENT ──────────────────────────────────────────
             _buildCard(
               title: 'Assignment',
               icon: Icons.local_shipping_outlined,
               children: [
-                // Vehicle row
                 _infoRow(
                   'Vehicle',
                   _job.vehicleName ?? 'Not assigned',
@@ -1086,7 +1099,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
                 const Divider(height: 16),
 
-                // Technician / drivers section
                 Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
@@ -1101,7 +1113,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                           ),
                         ),
                       ),
-                      // "Manage" button for admin/scheduler
                       if (canManageDrivers && _job.isActive)
                         Expanded(
                           child: Align(
@@ -1199,7 +1210,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               ),
                             ),
                           ],
-                          // Admin: quick-remove button
                           if (auth.isAdmin && _job.isActive) ...[
                             const Spacer(),
                             GestureDetector(
@@ -1227,7 +1237,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
             ),
             const SizedBox(height: 12),
 
-            // ── DESCRIPTION ─────────────────────────────────────────
             if (_job.description != null) ...[
               _buildCard(
                 title: 'Description',
@@ -1242,11 +1251,9 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               const SizedBox(height: 12),
             ],
 
-            // ── ACTIONS ─────────────────────────────────────────────
             if (_job.isActive) ...[
               const SizedBox(height: 8),
 
-              // ASSIGN VEHICLE
               if (canAssign && !hasVehicle) ...[
                 _actionButton(
                   icon: Icons.local_shipping_outlined,
@@ -1257,7 +1264,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // SWAP VEHICLE
               if (canSwap && hasVehicle) ...[
                 _actionButton(
                   icon: Icons.swap_horiz_outlined,
@@ -1268,7 +1274,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // REMOVE VEHICLE — admin only
               if (auth.isAdmin && hasVehicle) ...[
                 _actionButton(
                   icon: Icons.remove_circle_outline,
@@ -1279,7 +1284,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // Scheduler info when vehicle already assigned
               if (auth.isScheduler && hasVehicle) ...[
                 _infoNote(
                   'Vehicle assigned. Only administrators can swap vehicles.',
@@ -1287,7 +1291,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // MANAGE DRIVERS — inline shortcut (admin/scheduler)
               if (canManageDrivers) ...[
                 _actionButton(
                   icon: Icons.group_outlined,
@@ -1301,7 +1304,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 const SizedBox(height: 12),
               ],
 
-              // STATUS BUTTONS
               if (canUpdateStatus && nextStatuses.isNotEmpty) ...[
                 const Text(
                   'Update Status:',
@@ -1331,7 +1333,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 ),
               ],
 
-              // Read-only note for technician when no transitions available
               if (auth.isTechnician && nextStatuses.isEmpty) ...[
                 const SizedBox(height: 8),
                 _infoNote(
@@ -1348,8 +1349,6 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
-  // ── Widget helpers ─────────────────────────────────────────────────────────
-
   Widget _actionButton({
     required IconData icon,
     required String label,
@@ -1360,31 +1359,18 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     return SizedBox(
       width: double.infinity,
       height: 48,
-      child: outlined
-          ? OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon),
-              label: Text(label),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-                side: BorderSide(color: color),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            )
-          : OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon),
-              label: Text(label),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-                side: BorderSide(color: color),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
+      child: OutlinedButton.icon(
+        onPressed: onPressed,
+        icon: Icon(icon),
+        label: Text(label),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: color,
+          side: BorderSide(color: color),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+      ),
     );
   }
 

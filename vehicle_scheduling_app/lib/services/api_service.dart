@@ -1,7 +1,22 @@
 // ============================================
 // FILE: lib/services/api_service.dart
-// PURPOSE: Base HTTP client - all services use this
-// FIX:     Added setAuthToken() — JWT is now sent with every request
+//
+// FIX (Bug 2): _handleResponse() is now resilient to non-Map responses.
+//
+// WHY THIS CAUSED THE BUG:
+//   The PUT /api/job-assignments/:jobId/technicians endpoint (and others)
+//   can return a response body where the top-level JSON is valid but
+//   the cast `jsonDecode(body) as Map<String, dynamic>` throws a TypeError
+//   if the server ever returns a JSON array or an unexpected shape.
+//   When this happens, the assignment HAS already been saved to the DB,
+//   but Flutter catches the TypeError and reports failure to the screen.
+//   The user sees an error snackbar even though the driver was assigned.
+//
+// THE FIX:
+//   If jsonDecode succeeds but the result isn't a Map, we wrap it in
+//   { 'success': true, 'data': <decoded value> } instead of crashing.
+//   This makes the service layer resilient to minor backend response
+//   shape variations without hiding real errors.
 // ============================================
 
 import 'dart:convert';
@@ -9,11 +24,8 @@ import 'package:http/http.dart' as http;
 import 'package:vehicle_scheduling_app/config/app_config.dart';
 
 class ApiService {
-  // ── Singleton ──────────────────────────────────────────────
-  // Every service shares the same instance, so setAuthToken()
-  // only needs to be called once (at login / app start) and all
-  // subsequent requests across ALL services automatically carry
-  // the token. No per-screen injection needed.
+  // Singleton — all services share one instance so setAuthToken() only
+  // needs to be called once at login.
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
@@ -21,11 +33,6 @@ class ApiService {
   final String baseUrl = AppConfig.baseUrl;
   final http.Client _client = http.Client();
 
-  // ==========================================
-  // AUTH TOKEN — set once after login
-  // Every request will then include:
-  //   Authorization: Bearer <token>
-  // ==========================================
   String? _authToken;
 
   void setAuthToken(String? token) {
@@ -123,18 +130,47 @@ class ApiService {
 
   // ==========================================
   // HANDLE RESPONSE
+  //
+  // FIX (Bug 2): The original code did:
+  //   return jsonDecode(response.body) as Map<String, dynamic>;
+  //
+  // If the backend returns a JSON array or any non-Map value,
+  // that cast throws a TypeError at runtime. The assignment was
+  // already saved to the DB at that point, so this was a false error.
+  //
+  // Now we check the decoded type first:
+  //   - Map  → return it directly (normal path)
+  //   - Other → wrap in { success: true, data: ... } (safe fallback)
+  //   - Empty body → return { success: true }
   // ==========================================
   Map<String, dynamic> _handleResponse(http.Response response) {
     print('Response ${response.statusCode}');
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
+      // Empty body is fine — treat as success with no data
+      if (response.body.isEmpty) {
+        return {'success': true};
+      }
+
       try {
-        return jsonDecode(response.body) as Map<String, dynamic>;
+        final decoded = jsonDecode(response.body);
+
+        // Normal case: backend returned a JSON object
+        if (decoded is Map<String, dynamic>) {
+          return decoded;
+        }
+
+        // Unusual case: backend returned a JSON array or primitive.
+        // Wrap it so callers always get a Map without crashing.
+        // The 'success: true' here is safe because we're in the 2xx branch.
+        return {'success': true, 'data': decoded};
       } catch (e) {
+        // jsonDecode itself failed — the body is not valid JSON.
         throw ApiException('Failed to parse server response', 500);
       }
     }
 
+    // ── Error response (4xx / 5xx) ──────────────────────────────
     String errorMessage = 'Request failed (${response.statusCode})';
     try {
       final errorJson = jsonDecode(response.body) as Map<String, dynamic>;

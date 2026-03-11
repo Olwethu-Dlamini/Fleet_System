@@ -147,7 +147,15 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
       return res.status(400).json({ success: false, message: 'Invalid job ID' });
     }
 
-    const { technician_ids = [], assigned_by } = req.body;
+    // BUG 3 FIX: Read force_override from the request body.
+    // When an admin deliberately selects a driver who is already booked
+    // on another overlapping job, the Flutter screen sends force_override: true.
+    // Without reading this flag, isAdminOverride was always false because the
+    // admin's intent was never communicated to the backend.
+    //
+    // SECURITY: force_override only takes effect when req.user.role === 'admin'.
+    // A non-admin cannot trigger override behaviour regardless of what they send.
+    const { technician_ids = [], assigned_by, force_override = false } = req.body;
 
     if (!assigned_by) {
       return res.status(400).json({
@@ -165,8 +173,10 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
       ? technician_ids.map(Number).filter(Boolean)
       : [];
 
-    // Admin can force-assign drivers even if they have a conflicting job.
-    const isAdminOverride = req.user.role === 'admin';
+    // isAdminOverride requires BOTH conditions to be true:
+    //   1. The caller is admin (role check — non-admins cannot override)
+    //   2. The Flutter screen explicitly sent force_override: true (intent check)
+    const isAdminOverride = req.user.role === 'admin' && force_override === true;
     await Job.assignTechnicians(jobId, techIds, parseInt(assigned_by), isAdminOverride);
 
     const updated = await Job.getJobById(jobId);

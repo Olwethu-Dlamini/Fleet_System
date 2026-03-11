@@ -293,45 +293,76 @@ class JobAssignmentService {
   }
 
   // ==========================================
-  // NEW FUNCTION: assignTechnicians
+  // FUNCTION: assignTechnicians
   // PURPOSE: Update only the driver/technician list on an existing job.
   //          Does NOT change the vehicle or job_assignments row.
   //          Called by PUT /api/job-assignments/:jobId/technicians
+  //
+  // BUG 3 FIX: Added forceOverride parameter.
+  //
+  // WHY this bug existed:
+  //   The Flutter admin override flow lets an admin select a driver who is
+  //   already assigned to another overlapping job. The screen sends
+  //   force_override: true in the PUT body. But this method always ran
+  //   checkDriversAvailability() and threw on any conflict — the flag
+  //   never reached this layer. So the admin checkbox had zero effect.
+  //
+  // WHAT forceOverride does here:
+  //   true  → skip conflict check, call Job.removeDriversFromConflictingJobs()
+  //           to clear the driver from their old job BEFORE inserting here.
+  //           Driver moves to this job; old job loses them. No double-booking.
+  //   false → normal path: conflict check runs and throws if driver is busy.
+  //
+  // SECURITY: forceOverride is only set true by the route layer when
+  //   req.user.role === 'admin' AND force_override === true in the body.
   // ==========================================
-  static async assignTechnicians(jobId, technicianIds, assignedBy) {
+  static async assignTechnicians(jobId, technicianIds, assignedBy, forceOverride = false) {
     const job = await Job.getJobById(jobId);
     if (!job) throw new Error(`Job with ID ${jobId} not found`);
 
-    // ── Check driver conflicts before updating ──────────────────
     if (technicianIds.length > 0) {
-      console.log(`\n👤 Checking driver conflicts for job ${jobId}...`);
-      const driverCheck = await VehicleAvailabilityService.checkDriversAvailability(
-        technicianIds,
-        job.scheduled_date,
-        job.scheduled_time_start,
-        job.scheduled_time_end,
-        jobId // exclude this job so existing assignment doesn't conflict with itself
-      );
-
-      if (!driverCheck.allAvailable) {
-        const byDriver = {};
-        driverCheck.conflicts.forEach(c => {
-          if (!byDriver[c.driverName]) byDriver[c.driverName] = [];
-          byDriver[c.driverName].push(`${c.jobNumber} (${c.timeSlot})`);
-        });
-        const conflictMsg = Object.entries(byDriver)
-          .map(([name, jobs]) => `   • ${name} is already assigned to: ${jobs.join(', ')}`)
-          .join('\n');
-        throw new Error(
-          `Driver scheduling conflict:\n${conflictMsg}\n` +
-          `Remove the conflicting driver(s) or choose a different time.`
+      if (forceOverride) {
+        // Admin override: clear conflicting assignments first, then proceed
+        console.log(`\n👤 Admin override: clearing conflicts for [${technicianIds.join(', ')}] before assigning to job ${jobId}...`);
+        await Job.removeDriversFromConflictingJobs(
+          technicianIds,
+          job.scheduled_date,
+          job.scheduled_time_start,
+          job.scheduled_time_end,
+          jobId
         );
+        console.log('   ✓ Conflicting assignments cleared');
+      } else {
+        // Normal path: conflict check is the authoritative guard
+        console.log(`\n👤 Checking driver conflicts for job ${jobId}...`);
+        const driverCheck = await VehicleAvailabilityService.checkDriversAvailability(
+          technicianIds,
+          job.scheduled_date,
+          job.scheduled_time_start,
+          job.scheduled_time_end,
+          jobId // exclude this job so existing assignment doesn't conflict with itself
+        );
+
+        if (!driverCheck.allAvailable) {
+          const byDriver = {};
+          driverCheck.conflicts.forEach(c => {
+            if (!byDriver[c.driverName]) byDriver[c.driverName] = [];
+            byDriver[c.driverName].push(`${c.jobNumber} (${c.timeSlot})`);
+          });
+          const conflictMsg = Object.entries(byDriver)
+            .map(([name, jobs]) => `   • ${name} is already assigned to: ${jobs.join(', ')}`)
+            .join('\n');
+          throw new Error(
+            `Driver scheduling conflict:\n${conflictMsg}\n` +
+            `Remove the conflicting driver(s) or choose a different time.`
+          );
+        }
+        console.log('   ✓ No driver conflicts found');
       }
-      console.log('   ✓ No driver conflicts found');
     }
 
-    // Atomic replace of technician list
-    await Job.assignTechnicians(jobId, technicianIds, assignedBy);
+    // Atomic replace of technician list (same for both paths)
+    await Job.assignTechnicians(jobId, technicianIds, assignedBy, forceOverride);
     console.log(`   ✓ Technician list updated for job ${jobId}: [${technicianIds.join(', ')}]`);
 
     return await JobAssignmentService.getJobWithTechnicians(jobId);
@@ -654,6 +685,15 @@ class JobAssignmentService {
       console.error('Error in JobAssignmentService.getAssignmentsByDateRange:', error);
       throw error;
     }
+  }
+
+  // ==========================================
+  // HELPER: getJobWithTechnicians
+  // PURPOSE: Return a full job object (with technicians_json populated)
+  //          after an assignTechnicians() call.
+  // ==========================================
+  static async getJobWithTechnicians(jobId) {
+    return await Job.getJobById(jobId);
   }
 }
 

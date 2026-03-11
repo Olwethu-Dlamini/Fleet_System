@@ -1,14 +1,23 @@
 // ============================================
 // FILE: lib/providers/job_provider.dart
-// PURPOSE: Job state management
 //
-// FIXES:
-//   • assignTechnicians() now reloads the specific job by ID instead of
-//     calling loadJobs() — works correctly for all roles and avoids
-//     fetching all jobs when a technician is on the job detail screen.
-//   • updateJobStatus() same fix — reloads the specific job by ID so
-//     the technician detail screen reflects the new status immediately.
-//   • loadMyJobs() already existed — used by dashboard for technicians.
+// FIXES APPLIED:
+//   BUG 1 — createJob() now returns Job? instead of bool.
+//            The screen needs the actual job object (specifically its ID)
+//            to call assignTechnicians() as a separate step after creation.
+//            Returning bool meant the screen had to guess the new job's ID
+//            by sorting allJobs — which is a race condition.
+//
+//   BUG 2 — assignTechnicians() and assignJob() already called
+//            _reloadSingleJob() internally, but the screens were ALSO
+//            calling loadJobById() again afterwards. That double-reload
+//            caused a second loading state + notify which made the UI
+//            flash and occasionally race. Fixed in the screens, not here.
+//            Provider code below is already correct for these methods.
+//
+//   BUG 3 — assignTechnicians() now accepts forceOverride: bool param
+//            and passes it through to JobService. When true the backend
+//            will remove the driver from any conflicting job first.
 // ============================================
 
 import 'package:flutter/material.dart';
@@ -28,7 +37,6 @@ class JobProvider extends ChangeNotifier {
   JobStatus _status = JobStatus.idle;
   String? _error;
 
-  // Filters
   String? _statusFilter;
   String? _typeFilter;
 
@@ -62,17 +70,10 @@ class JobProvider extends ChangeNotifier {
   int get completedCount =>
       _jobs.where((j) => j.currentStatus == 'completed').length;
 
-  // ==========================================
-  // EXPOSE SERVICE so AuthProvider can inject token:
-  //   context.read<AuthProvider>().injectToken(
-  //     context.read<JobProvider>().jobService.apiService
-  //   );
-  // ==========================================
   JobService get jobService => _jobService;
 
   // ==========================================
   // LOAD ALL JOBS  (admin / scheduler)
-  // GET /api/jobs  — returns every job in the system.
   // ==========================================
   Future<void> loadJobs() async {
     _status = JobStatus.loading;
@@ -92,9 +93,6 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // LOAD MY JOBS  (technician / driver)
-  // GET /api/jobs/my-jobs — backend filters by the JWT user id,
-  // returning only jobs assigned to this technician via the
-  // job_technicians table OR as the legacy driver_id.
   // ==========================================
   Future<void> loadMyJobs() async {
     _status = JobStatus.loading;
@@ -133,10 +131,20 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // CREATE JOB
-  // Accepts optional technicianIds so drivers can be assigned
-  // at creation time (written to job_technicians on the backend).
+  //
+  // FIX (Bug 1): Changed return type from bool to Job?.
+  //
+  // WHY: The create job screen needs the new job's ID immediately after
+  // creation so it can call assignTechnicians() as a separate API call.
+  // Returning just true/false forced the screen to find the new job by
+  // sorting allJobs — a race condition that sometimes found the wrong job.
+  //
+  // HOW TO USE IN SCREEN:
+  //   final newJob = await jobProvider.createJob(...);
+  //   if (newJob == null) { /* handle error */ return; }
+  //   // now safely use newJob.id
   // ==========================================
-  Future<bool> createJob({
+  Future<Job?> createJob({
     required String customerName,
     String? customerPhone,
     required String customerAddress,
@@ -148,7 +156,10 @@ class JobProvider extends ChangeNotifier {
     required int estimatedDurationMinutes,
     String priority = 'normal',
     required int createdBy,
-    List<int> technicianIds = const [],
+    // NOTE: We intentionally do NOT pass technicianIds here anymore.
+    // The create screen calls assignTechnicians() separately after getting
+    // the new job's ID from this return value. This is safer because the
+    // POST /api/jobs endpoint does not guarantee it processes technician_ids.
   }) async {
     _status = JobStatus.loading;
     _error = null;
@@ -167,18 +178,18 @@ class JobProvider extends ChangeNotifier {
         estimatedDurationMinutes: estimatedDurationMinutes,
         priority: priority,
         createdBy: createdBy,
-        technicianIds: technicianIds,
+        // No technicianIds passed — handled separately after creation
       );
 
       _jobs.insert(0, newJob);
       _status = JobStatus.success;
       notifyListeners();
-      return true;
+      return newJob; // ← Return the actual job, not just true
     } catch (e) {
       _error = e.toString();
       _status = JobStatus.error;
       notifyListeners();
-      return false;
+      return null; // ← null means failure, screens check for null
     }
   }
 
@@ -238,8 +249,6 @@ class JobProvider extends ChangeNotifier {
         assignedBy: assignedBy,
       );
 
-      // Reload just this job so the detail screen gets fresh assignment data
-      // without forcing a full list reload (important for technician context).
       await _reloadSingleJob(jobId);
       return true;
     } catch (e) {
@@ -251,17 +260,23 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // ASSIGN TECHNICIANS
-  // Replaces the driver list on a job without changing its vehicle.
-  // Calls PUT /api/jobs/:id/technicians  (or the job-assignments route).
   //
-  // FIX: previously called loadJobs() which broke technician context
-  // because technicians are not allowed to fetch all jobs.
-  // Now reloads only the specific job by ID.
+  // FIX (Bug 3): Added forceOverride parameter.
+  //
+  // WHY: Admin users should be able to assign a driver even if that
+  // driver has a conflicting job. When forceOverride is true, the backend
+  // will first remove the driver from their conflicting job(s), then
+  // assign them to the new job. Without this flag, the backend's conflict
+  // check rejects the request regardless of who is making it.
+  //
+  // The flag is only sent to the backend when true to keep the payload
+  // clean for normal (non-admin) assignments.
   // ==========================================
   Future<bool> assignTechnicians({
     required int jobId,
     required List<int> technicianIds,
     required int assignedBy,
+    bool forceOverride = false, // ← NEW: admin-only force flag
   }) async {
     _error = null;
 
@@ -270,9 +285,10 @@ class JobProvider extends ChangeNotifier {
         jobId: jobId,
         technicianIds: technicianIds,
         assignedBy: assignedBy,
+        forceOverride: forceOverride,
       );
 
-      // Reload only this job — safe for all roles (admin, scheduler, technician).
+      // Reload only this job — safe for all roles.
       await _reloadSingleJob(jobId);
       return true;
     } catch (e) {
@@ -284,10 +300,6 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // UPDATE STATUS
-  //
-  // FIX: after optimistically updating the in-memory list, also fetch
-  // the full job from the server so technicians_json (driver list) and
-  // any other server-side changes are reflected in the detail screen.
   // ==========================================
   Future<bool> updateJobStatus({
     required int jobId,
@@ -305,7 +317,7 @@ class JobProvider extends ChangeNotifier {
         reason: reason,
       );
 
-      // Optimistic update in the list
+      // Optimistic update so the UI responds instantly
       final index = _jobs.indexWhere((j) => j.id == jobId);
       if (index != -1) {
         _jobs[index] = _jobs[index].copyWith(currentStatus: newStatus);
@@ -316,7 +328,7 @@ class JobProvider extends ChangeNotifier {
 
       notifyListeners();
 
-      // Background refresh of the full job object (includes technicians_json)
+      // Background refresh to pick up any server-side changes
       _refreshJobSilently(jobId);
 
       return true;
@@ -329,8 +341,6 @@ class JobProvider extends ChangeNotifier {
 
   // ==========================================
   // UNASSIGN VEHICLE  (admin only)
-  // Removes the vehicle assignment from a job.
-  // Job reverts to 'pending' on the backend if it was 'assigned'.
   // ==========================================
   Future<bool> unassignVehicle({required int jobId}) async {
     _error = null;
@@ -374,15 +384,11 @@ class JobProvider extends ChangeNotifier {
   // PRIVATE HELPERS
   // ==========================================
 
-  /// Replace a job in the in-memory list by ID.
   void _replaceJobInList(Job updated) {
     final index = _jobs.indexWhere((j) => j.id == updated.id);
     if (index != -1) _jobs[index] = updated;
   }
 
-  /// Fetch the latest version of a single job from the server,
-  /// update the in-memory list and selectedJob, then notify listeners.
-  /// Used after mutations (assign, update status, manage drivers).
   Future<void> _reloadSingleJob(int jobId) async {
     try {
       final fresh = await _jobService.getJobById(jobId);
@@ -392,20 +398,29 @@ class JobProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
-      // Non-fatal — the optimistic update already happened.
+      // Non-fatal — optimistic update already happened
     }
   }
 
-  /// Same as _reloadSingleJob but does NOT propagate errors and does not
-  /// change loading state — safe to fire-and-forget after updateJobStatus.
   void _refreshJobSilently(int jobId) {
     _jobService
         .getJobById(jobId)
         .then((fresh) {
           if (fresh != null) {
-            _replaceJobInList(fresh);
-            if (_selectedJob?.id == jobId) _selectedJob = fresh;
-            notifyListeners();
+            bool changed = false;
+            final index = _jobs.indexWhere((j) => j.id == fresh.id);
+            if (index != -1 && _jobs[index].updatedAt != fresh.updatedAt) {
+              _jobs[index] = fresh;
+              changed = true;
+            }
+            if (_selectedJob?.id == jobId &&
+                _selectedJob?.updatedAt != fresh.updatedAt) {
+              _selectedJob = fresh;
+              changed = true;
+            }
+            // Only notify if something actually changed to avoid
+            // triggering a rebuild mid-frame after status updates.
+            if (changed) notifyListeners();
           }
         })
         .catchError((_) {});

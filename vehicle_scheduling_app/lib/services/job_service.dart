@@ -1,10 +1,18 @@
 // ============================================
 // FILE: lib/services/job_service.dart
-// CHANGES:
-//   • createJob now accepts technicianIds list
-//   • assignJob now accepts technicianIds list
-//   • getMyJobs — returns only jobs for the logged-in technician
-//   • assignTechnicians — set/replace technicians on a job
+//
+// FIXES APPLIED:
+//   BUG 1 — createJob no longer sends technician_ids.
+//            Driver assignment is now always done as a separate
+//            assignTechnicians() call from the screen, using the
+//            job ID returned by createJob(). This is more reliable
+//            because the POST /api/jobs endpoint may silently ignore
+//            technician_ids if the backend hasn't implemented it.
+//
+//   BUG 3 — assignTechnicians() now accepts forceOverride: bool.
+//            When true, force_override: true is included in the PUT body.
+//            The backend reads this flag and skips the conflict check,
+//            instead removing the driver from any conflicting job first.
 // ============================================
 
 import 'package:vehicle_scheduling_app/config/app_config.dart';
@@ -21,14 +29,13 @@ class JobService {
     return '$y-$m-$d';
   }
 
-  // ── Helpers to parse job list from response ─────────────────
   List<Job> _parseJobList(dynamic raw) {
     if (raw == null) return [];
     return (raw as List<dynamic>).map((j) => Job.fromJson(j)).toList();
   }
 
   // ══════════════════════════════════════════════════════════
-  // GET ALL JOBS  (admin / scheduler — sees every job)
+  // GET ALL JOBS
   // ══════════════════════════════════════════════════════════
   Future<List<Job>> getAllJobs() async {
     try {
@@ -44,8 +51,7 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
-  // GET MY JOBS  (technician — only sees their assigned jobs)
-  // GET /api/jobs/my-jobs   (backend filters by JWT user id)
+  // GET MY JOBS  (technician)
   // ══════════════════════════════════════════════════════════
   Future<List<Job>> getMyJobs() async {
     try {
@@ -79,7 +85,18 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
-  // CREATE JOB  — now accepts optional technicianIds
+  // CREATE JOB
+  //
+  // FIX (Bug 1): technician_ids is intentionally NOT sent here.
+  //
+  // The caller (create_job_screen.dart) receives the new Job object back
+  // from JobProvider.createJob() and then calls assignTechnicians()
+  // separately using the real job ID. This is the reliable approach
+  // because:
+  //   a) The POST /api/jobs endpoint may not process technician_ids.
+  //   b) If it does, it doesn't report back which drivers were actually
+  //      saved, so the UI can't confirm success.
+  //   c) A dedicated PUT call gives us a clear success/failure signal.
   // ══════════════════════════════════════════════════════════
   Future<Job> createJob({
     required String customerName,
@@ -93,7 +110,6 @@ class JobService {
     required int estimatedDurationMinutes,
     String priority = 'normal',
     required int createdBy,
-    List<int> technicianIds = const [], // ← NEW
   }) async {
     try {
       final data = <String, dynamic>{
@@ -108,7 +124,7 @@ class JobService {
         'estimated_duration_minutes': estimatedDurationMinutes,
         'priority': priority,
         'created_by': createdBy,
-        if (technicianIds.isNotEmpty) 'technician_ids': technicianIds,
+        // NOTE: No technician_ids here. Assigned separately after creation.
       };
       final response = await apiService.post(
         AppConfig.jobsEndpoint,
@@ -125,8 +141,7 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
-  // UPDATE JOB  (admin / scheduler — full field edit)
-  // PUT /api/jobs/:id
+  // UPDATE JOB
   // ══════════════════════════════════════════════════════════
   Future<Job> updateJob({
     required int jobId,
@@ -202,14 +217,13 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
-  // ASSIGN JOB — vehicle + optional technicianIds list
-  // POST /api/job-assignments/assign
+  // ASSIGN JOB  (vehicle + optional technicians)
   // ══════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> assignJob({
     required int jobId,
     required int vehicleId,
-    int? driverId, // legacy single driver
-    List<int> technicianIds = const [], // ← NEW multi-technician
+    int? driverId,
+    List<int> technicianIds = const [],
     String? notes,
     required int assignedBy,
   }) async {
@@ -233,18 +247,38 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
-  // ASSIGN TECHNICIANS  — update technician list on existing job
-  // PUT /api/job-assignments/:jobId/technicians
+  // ASSIGN TECHNICIANS
+  //
+  // FIX (Bug 3): Added forceOverride parameter.
+  //
+  // WHY: Without this, the backend's conflict check blocks the request
+  // even for admins. The admin's intent (override the conflict) never
+  // reached the server — the frontend allowed the checkbox but sent
+  // the same payload as a non-admin user.
+  //
+  // WHAT force_override DOES ON THE BACKEND:
+  //   When true, jobs.js route sees req.user.role === 'admin' AND
+  //   force_override === true, so it calls Job.assignTechnicians() with
+  //   isAdminOverride = true, which skips conflict detection and instead
+  //   removes the driver from any conflicting job before inserting.
   // ══════════════════════════════════════════════════════════
   Future<Map<String, dynamic>> assignTechnicians({
     required int jobId,
     required List<int> technicianIds,
     required int assignedBy,
+    bool forceOverride = false, // ← NEW
   }) async {
     try {
+      final data = <String, dynamic>{
+        'technician_ids': technicianIds,
+        'assigned_by': assignedBy,
+        // Only include the flag when it's actually true to keep the
+        // payload clean for normal assignments.
+        if (forceOverride) 'force_override': true,
+      };
       return await apiService.put(
         '${AppConfig.assignmentsEndpoint}/$jobId/technicians',
-        data: {'technician_ids': technicianIds, 'assigned_by': assignedBy},
+        data: data,
       );
     } catch (e) {
       print('JobService.assignTechnicians error: $e');
@@ -253,9 +287,7 @@ class JobService {
   }
 
   // ══════════════════════════════════════════════════════════
-  // UNASSIGN VEHICLE  (admin only)
-  // DELETE /api/jobs/:jobId/vehicle
-  // Removes the vehicle from the job and reverts status to pending.
+  // UNASSIGN VEHICLE
   // ══════════════════════════════════════════════════════════
   Future<void> unassignVehicle({required int jobId}) async {
     try {

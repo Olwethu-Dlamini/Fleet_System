@@ -643,8 +643,15 @@ class Job {
   // FUNCTION: assignTechnicians  ← NEW
   // PURPOSE: Replace the full technician list for a job atomically.
   // Pass [] to clear all technicians.
+  //
+  // FIX (Bug 3): Added isAdminOverride parameter.
+  // When true, the service layer has already cleared conflicting
+  // assignments via removeDriversFromConflictingJobs(), so we skip
+  // straight to the DELETE + INSERT without any further conflict check.
+  // The isAdminOverride flag is passed through from the route layer,
+  // which enforces that only admin-role JWTs can set it to true.
   // ==========================================
-  static async assignTechnicians(jobId, technicianIds, assignedBy) {
+  static async assignTechnicians(jobId, technicianIds, assignedBy, isAdminOverride = false) {
     const conn = await db.getConnection();
     try {
       await conn.beginTransaction();
@@ -665,6 +672,10 @@ class Job {
       }
 
       await conn.commit();
+
+      if (isAdminOverride) {
+        console.log(`   ✓ [ADMIN OVERRIDE] Technician list replaced for job ${jobId}`);
+      }
     } catch (err) {
       await conn.rollback();
       console.error('Error in Job.assignTechnicians:', err);
@@ -672,6 +683,60 @@ class Job {
     } finally {
       conn.release();
     }
+  }
+
+  // ==========================================
+  // FUNCTION: removeDriversFromConflictingJobs  ← NEW (Bug 3 fix)
+  // PURPOSE: Before an admin override INSERT, remove the given drivers
+  //          from any other job that overlaps with the target time window
+  //          on the same date. This ensures a driver is never on two jobs
+  //          simultaneously — the admin's intent is to MOVE the driver,
+  //          not to double-book them.
+  //
+  // Called by: jobAssignmentService.assignTechnicians() when forceOverride=true
+  //
+  // @param {number[]} technicianIds  - Driver user IDs to free up
+  // @param {string}   date           - YYYY-MM-DD
+  // @param {string}   startTime      - HH:MM:SS
+  // @param {string}   endTime        - HH:MM:SS
+  // @param {number}   excludeJobId   - The job we're assigning TO (don't
+  //                                    delete this job's existing rows)
+  // ==========================================
+  static async removeDriversFromConflictingJobs(technicianIds, date, startTime, endTime, excludeJobId) {
+    if (!technicianIds || technicianIds.length === 0) return;
+
+    // Find all job IDs where any of these drivers is currently booked
+    // in an overlapping window on the same date
+    const [conflictingJobs] = await db.query(
+      `SELECT DISTINCT jt.job_id
+       FROM job_technicians jt
+       JOIN jobs j ON jt.job_id = j.id
+       WHERE jt.user_id IN (?)
+         AND j.scheduled_date = ?
+         AND j.current_status NOT IN ('completed', 'cancelled')
+         AND ? < j.scheduled_time_end
+         AND ? > j.scheduled_time_start
+         AND j.id != ?`,
+      [technicianIds, date, startTime, endTime, excludeJobId]
+    );
+
+    if (conflictingJobs.length === 0) return;
+
+    const conflictingJobIds = conflictingJobs.map(r => r.job_id);
+
+    // Remove only these specific drivers from those conflicting jobs —
+    // do NOT touch other drivers on those jobs
+    await db.query(
+      `DELETE FROM job_technicians
+       WHERE user_id IN (?)
+         AND job_id  IN (?)`,
+      [technicianIds, conflictingJobIds]
+    );
+
+    console.log(
+      `   ✓ Removed drivers [${technicianIds.join(', ')}] from ` +
+      `conflicting jobs [${conflictingJobIds.join(', ')}]`
+    );
   }
 
   // ==========================================
