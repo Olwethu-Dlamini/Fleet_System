@@ -2,11 +2,36 @@
 // FILE: lib/screens/dashboard/dashboard_screen.dart
 // PURPOSE: Role-aware dashboard
 //
-// FIXES:
-//   • _loadDashboard() calls loadMyJobs() for technicians instead of
-//     loadJobs() so only their assigned jobs are fetched from the server.
-//   • _buildTechnicianDashboard() filters using hasTechnician(userId)
-//     OR driverId == userId — covers both assignment paths.
+// FIXES APPLIED IN THIS VERSION:
+//
+//  BUG 1 — Stat card labelled "Pending" secretly counted both
+//           'pending' AND 'assigned' statuses together. A driver
+//           whose jobs were all 'assigned' would see "2 Pending"
+//           in the card but find zero jobs labelled "Pending" in
+//           the list below — because the list correctly shows each
+//           job's real status. The card label and its count were
+//           lying to each other.
+//           FIX: Split into two separate cards — "Pending" counts
+//           only status=='pending', "Assigned" counts only
+//           status=='assigned'. Both are now honest.
+//
+//  BUG 2 — isLoading check included vehProvider.isLoading.
+//           Technicians never call loadVehicles(), so if
+//           vehProvider.isLoading happened to be true from a
+//           previous state (e.g. a cached admin session, or an
+//           in-flight request from another screen), the technician
+//           dashboard would either spin forever or flicker.
+//           FIX: For technicians, isLoading only depends on
+//           _loading and jobProvider.isLoading. vehProvider is
+//           irrelevant to technicians.
+//
+//  BUG 3 — _loadDashboard() for technicians had no try/catch
+//           around loadMyJobs(). If the network request threw,
+//           _loading stayed true forever — the dashboard showed
+//           a spinner permanently with no way to recover.
+//           FIX: Wrapped in try/catch; sets _error and clears
+//           _loading on failure so the error state renders and
+//           the user can tap Retry.
 // ============================================
 
 import 'dart:math' as math;
@@ -147,11 +172,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     auth.injectToken(context.read<VehicleProvider>().vehicleService.apiService);
   }
 
-  // ============================================================
-  // FIX: Technicians call loadMyJobs() so the server filters by
-  //      their user ID via job_technicians. Admin/Scheduler call
-  //      loadJobs() to get everything.
-  // ============================================================
   Future<void> _loadDashboard() async {
     if (!mounted) return;
     setState(() {
@@ -163,48 +183,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final auth = context.read<AuthProvider>();
 
     if (auth.isTechnician) {
-      // Technicians only load their own assigned jobs from /api/jobs/my-jobs
-      await context.read<JobProvider>().loadMyJobs();
-    } else {
-      // Admin / Scheduler load all jobs and vehicles
-      await Future.wait([
-        context.read<JobProvider>().loadJobs(),
-        context.read<VehicleProvider>().loadVehicles(),
-      ]);
-
-      if (!mounted) return;
-
+      // FIX (Bug 3): Wrap in try/catch so a network failure sets _error
+      // and clears _loading, letting the error UI render and the user retry.
+      // Previously a thrown exception left _loading=true forever.
       try {
-        final res = await _apiService.get(
-          '${AppConfig.dashboardEndpoint}/summary',
-        );
-        if (res.containsKey('summary') && res['summary'] is Map) {
-          final s = res['summary'] as Map<String, dynamic>;
-          if (mounted) {
-            setState(() {
-              _summary = {
-                'totalJobsToday': s['jobsToday'] ?? 0,
-                'pendingJobs': _countStatus(res['jobsToday'], 'pending'),
-                'inProgressJobs': s['vehiclesBusy'] ?? 0,
-                'completedJobs': _countStatus(res['jobsToday'], 'completed'),
-                'totalVehicles': s['totalVehicles'] ?? 0,
-                'activeVehicles': s['vehiclesAvailable'] ?? 0,
-              };
-              _loading = false;
-            });
-            return;
-          }
+        await context.read<JobProvider>().loadMyJobs();
+      } catch (e) {
+        if (mounted) {
+          setState(() {
+            _error = e.toString();
+            _loading = false;
+          });
         }
-      } catch (_) {}
-
-      _computeSummaryLocally();
+        return;
+      }
+      if (mounted) setState(() => _loading = false);
       return;
     }
 
-    // Technician path — compute their personal summary locally
-    if (mounted) {
-      setState(() => _loading = false);
-    }
+    // Admin / Scheduler — load all jobs and vehicles
+    await Future.wait([
+      context.read<JobProvider>().loadJobs(),
+      context.read<VehicleProvider>().loadVehicles(),
+    ]);
+
+    if (!mounted) return;
+
+    try {
+      final res = await _apiService.get(
+        '${AppConfig.dashboardEndpoint}/summary',
+      );
+      if (res.containsKey('summary') && res['summary'] is Map) {
+        final s = res['summary'] as Map<String, dynamic>;
+        if (mounted) {
+          setState(() {
+            _summary = {
+              'totalJobsToday': s['jobsToday'] ?? 0,
+              'pendingJobs': _countStatus(res['jobsToday'], 'pending'),
+              'inProgressJobs': s['vehiclesBusy'] ?? 0,
+              'completedJobs': _countStatus(res['jobsToday'], 'completed'),
+              'totalVehicles': s['totalVehicles'] ?? 0,
+              'activeVehicles': s['vehiclesAvailable'] ?? 0,
+            };
+            _loading = false;
+          });
+          return;
+        }
+      }
+    } catch (_) {}
+
+    _computeSummaryLocally();
   }
 
   int _countStatus(dynamic jobsList, String status) {
@@ -253,8 +281,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final auth = context.watch<AuthProvider>();
     final jobProvider = context.watch<JobProvider>();
     final vehProvider = context.watch<VehicleProvider>();
-    final isLoading =
-        _loading || jobProvider.isLoading || vehProvider.isLoading;
+
+    // FIX (Bug 2): Technicians never call loadVehicles(), so
+    // vehProvider.isLoading must be excluded from their loading check.
+    // Including it caused the dashboard to spin or flicker whenever
+    // vehProvider happened to be in a loading state from a prior context.
+    final isLoading = auth.isTechnician
+        ? _loading || jobProvider.isLoading
+        : _loading || jobProvider.isLoading || vehProvider.isLoading;
+
     final error = _error ?? jobProvider.error ?? vehProvider.error;
 
     return Scaffold(
@@ -300,11 +335,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final today = DateTime.now();
     final userId = auth.user?.id;
 
-    // ── FIX: match by job_technicians list OR legacy driver_id ──
-    // Because jobs can be assigned via "Manage Drivers" (writes to
-    // job_technicians) or via the old driver_id field in job_assignments.
-    // hasTechnician() checks job.technicians — populated from
-    // technicians_json returned by /api/jobs/my-jobs.
     final myJobs = jobProvider.allJobs.where((j) {
       if (userId == null) return false;
       return j.hasTechnician(userId) || j.driverId == userId;
@@ -333,13 +363,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
             .toList()
           ..sort((a, b) => a.scheduledDate.compareTo(b.scheduledDate));
 
+    // FIX (Bug 1): Count each status independently so each stat card
+    // shows exactly what its label says. Previously 'pending' counted
+    // both pending AND assigned together, so a driver with 2 'assigned'
+    // jobs would see "2 Pending" in the card but find zero jobs labelled
+    // "Pending" in the list below — because the list correctly shows each
+    // job's real status badge.
+    final pending = todayJobs.where((j) => j.currentStatus == 'pending').length;
+    final assigned = todayJobs
+        .where((j) => j.currentStatus == 'assigned')
+        .length;
     final inProgress = todayJobs
         .where((j) => j.currentStatus == 'in_progress')
-        .length;
-    final pending = todayJobs
-        .where(
-          (j) => j.currentStatus == 'pending' || j.currentStatus == 'assigned',
-        )
         .length;
     final completed = todayJobs
         .where((j) => j.currentStatus == 'completed')
@@ -359,10 +394,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildWelcomeHeader(auth),
                 const SizedBox(height: 20),
                 _buildTechnicianStatCards(
-                  inProgress,
-                  pending,
-                  completed,
-                  todayJobs.length,
+                  pending: pending,
+                  assigned: assigned,
+                  inProgress: inProgress,
+                  completed: completed,
                 ),
                 const SizedBox(height: 24),
                 _buildSectionTitle("Today's Jobs  (${todayJobs.length})"),
@@ -424,17 +459,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildTechnicianStatCards(
-    int inProgress,
-    int pending,
-    int completed,
-    int total,
-  ) {
+  // FIX (Bug 1): Now takes named parameters for each individual status
+  // count so there's a 1-to-1 mapping between label and number.
+  Widget _buildTechnicianStatCards({
+    required int pending,
+    required int assigned,
+    required int inProgress,
+    required int completed,
+  }) {
     final cardData = [
       _StatCardData(
-        label: 'Jobs Today',
-        value: '$total',
-        icon: Icons.work_outline,
+        label: 'Pending',
+        value: '$pending',
+        icon: Icons.pending_outlined,
+        color: const Color(0xFFEF4444),
+        patternType: _PatternType.dots,
+      ),
+      _StatCardData(
+        label: 'Assigned',
+        value: '$assigned',
+        icon: Icons.assignment_outlined,
         color: AppTheme.primaryColor,
         patternType: _PatternType.circles,
       ),
@@ -444,13 +488,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         icon: Icons.directions_car_outlined,
         color: AppTheme.inProgressColor,
         patternType: _PatternType.waves,
-      ),
-      _StatCardData(
-        label: 'Pending',
-        value: '$pending',
-        icon: Icons.pending_outlined,
-        color: const Color(0xFFEF4444),
-        patternType: _PatternType.dots,
       ),
       _StatCardData(
         label: 'Completed',

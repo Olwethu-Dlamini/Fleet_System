@@ -21,6 +21,7 @@
 // ============================================
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:vehicle_scheduling_app/models/job.dart';
 import 'package:vehicle_scheduling_app/services/job_service.dart';
 
@@ -326,10 +327,36 @@ class JobProvider extends ChangeNotifier {
         _selectedJob = _selectedJob?.copyWith(currentStatus: newStatus);
       }
 
-      notifyListeners();
-
-      // Background refresh to pick up any server-side changes
-      _refreshJobSilently(jobId);
+      // CRITICAL: Use addPostFrameCallback — NOT Future.microtask — to
+      // schedule notifyListeners after a status update.
+      //
+      // WHY microtask is wrong:
+      //   Microtasks run in the same event-loop turn, BEFORE the next I/O
+      //   callback. Flutter's frame pipeline is driven by the engine calling
+      //   into Dart via platform callbacks. When a dialog closes and this
+      //   code runs, we are still inside the gesture/event callback that
+      //   drove the "Confirm" button tap. The microtask queue drains BEFORE
+      //   that callback returns to the engine, which means notifyListeners()
+      //   fires while Flutter's build/layout/paint for the dialog-close Hero
+      //   transition is still in progress. This causes every error in the
+      //   cascade: Hero tag clash, dirty-widget-wrong-scope, RenderFlex ghost.
+      //
+      // WHY addPostFrameCallback is correct:
+      //   SchedulerBinding guarantees this callback runs AFTER the current
+      //   frame's build, layout, and paint phases are 100% complete — after
+      //   the Hero transition has fully resolved, after the dialog subtree is
+      //   fully torn down, after all dirty elements have been rebuilt.
+      //   Only then does notifyListeners() schedule the NEXT frame's rebuild.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
+        notifyListeners();
+        // Terminal statuses (cancelled/completed) never change again.
+        // A background refresh would just fire another notifyListeners()
+        // into a potentially mid-disposal widget tree.
+        const terminalStatuses = {'cancelled', 'completed'};
+        if (!terminalStatuses.contains(newStatus)) {
+          _refreshJobSilently(jobId);
+        }
+      });
 
       return true;
     } catch (e) {

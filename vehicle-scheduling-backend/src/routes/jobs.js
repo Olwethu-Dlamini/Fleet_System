@@ -13,9 +13,10 @@
 
 const express   = require('express');
 const router    = express.Router();
-const Job       = require('../models/Job');
-const db        = require('../config/database');
-const { verifyToken } = require('../middleware/authMiddleware');
+const Job                   = require('../models/Job');
+const JobAssignmentService  = require('../services/jobAssignmentService');
+const db                    = require('../config/database');
+const { verifyToken }       = require('../middleware/authMiddleware');
 
 // ==========================================
 // GET /api/jobs
@@ -173,11 +174,33 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
       ? technician_ids.map(Number).filter(Boolean)
       : [];
 
-    // isAdminOverride requires BOTH conditions to be true:
+    // forceOverride requires BOTH conditions to be true:
     //   1. The caller is admin (role check — non-admins cannot override)
     //   2. The Flutter screen explicitly sent force_override: true (intent check)
-    const isAdminOverride = req.user.role === 'admin' && force_override === true;
-    await Job.assignTechnicians(jobId, techIds, parseInt(assigned_by), isAdminOverride);
+    //
+    // FIX: Route through JobAssignmentService.assignTechnicians(), NOT
+    // Job.assignTechnicians() directly.
+    //
+    // The old code called Job.assignTechnicians() here, which skips the entire
+    // service layer. That meant:
+    //   • On the normal path  → conflict check in the service was never run
+    //                           (it ran anyway inside the model, but only logged)
+    //   • On the override path → removeDriversFromConflictingJobs() was never
+    //                            called, so the driver was never freed from their
+    //                            old job, and the INSERT then hit the same
+    //                            conflict check in the service and threw.
+    //
+    // JobAssignmentService.assignTechnicians() is the correct entry point:
+    //   forceOverride=false → runs checkDriversAvailability(), throws on conflict
+    //   forceOverride=true  → calls removeDriversFromConflictingJobs() first,
+    //                          then proceeds to the INSERT (driver is moved)
+    const forceOverride = req.user.role === 'admin' && force_override === true;
+    await JobAssignmentService.assignTechnicians(
+      jobId,
+      techIds,
+      parseInt(assigned_by),
+      forceOverride
+    );
 
     const updated = await Job.getJobById(jobId);
     res.json({

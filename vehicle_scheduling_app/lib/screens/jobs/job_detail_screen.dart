@@ -29,6 +29,7 @@
 // ============================================
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import 'package:vehicle_scheduling_app/config/app_config.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
@@ -104,6 +105,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     } else {
       final confirm = await showDialog<bool>(
         context: context,
+        useRootNavigator: false,
         builder: (_) => AlertDialog(
           title: const Text('Update Status'),
           content: Text(
@@ -134,14 +136,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     if (!mounted) return;
 
     if (success) {
-      // Use addPostFrameCallback to ensure setState runs after the current
-      // frame completes. updateJobStatus() calls notifyListeners() which can
-      // trigger a rebuild via context.watch<JobProvider>(); if we also call
-      // setState() in the same microtask, Flutter's assertion fires because
-      // the widget tree is being mutated while a frame is already building.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Same reasoning as the provider: addPostFrameCallback ensures setState
+      // runs after the current frame (including the dialog-close Hero
+      // transition) is fully complete. Future.microtask runs BEFORE the
+      // frame ends and causes the same cascade of assertion errors.
+      SchedulerBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
-        setState(() => _job = _job.copyWith(currentStatus: newStatus));
+        final updated = context.read<JobProvider>().selectedJob;
+        setState(
+          () => _job = updated ?? _job.copyWith(currentStatus: newStatus),
+        );
         _showSnack('Status updated to ${newStatus.replaceAll('_', ' ')}');
       });
     } else {
@@ -158,6 +162,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     final result = await showDialog<String>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) => AlertDialog(
@@ -282,7 +287,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       ),
     );
 
-    controller.dispose();
+    // Defer disposal until after the current frame completes so the Hero
+    // transition cleanup (visitChildElements on the closing dialog tree)
+    // finishes before the controller is invalidated.
+    SchedulerBinding.instance.addPostFrameCallback((_) => controller.dispose());
     return result;
   }
 
@@ -292,6 +300,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   Future<void> _unassignDriver(int driverId, String driverName) async {
     final confirm = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Remove Driver'),
         content: Text(
@@ -352,6 +361,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   Future<void> _unassignVehicle() async {
     final confirm = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Remove Vehicle'),
         content: Text(
@@ -421,6 +431,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     await showDialog(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: Text(isSwap ? 'Swap Vehicle' : 'Assign Vehicle'),
@@ -479,6 +490,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       jobId: _job.id,
       vehicleId: vehicleId,
       assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+      // BUGFIX: Pass the currently assigned technicians so the backend
+      // preserves them. The POST /api/job-assignments/assign endpoint
+      // receives technician_ids and writes job_technicians rows as part
+      // of the same transaction. If we omit this (defaulting to []), the
+      // backend treats it as "clear all technicians" and the previously
+      // assigned drivers are silently removed.
+      technicianIds: _job.technicians.map((t) => t.id).toList(),
     );
 
     if (!mounted) return;
@@ -508,6 +526,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     final confirm = await showDialog<bool>(
       context: context,
+      useRootNavigator: false,
       builder: (_) => AlertDialog(
         title: const Text('Confirm Vehicle Swap'),
         content: Text(
@@ -537,6 +556,10 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
       jobId: _job.id,
       vehicleId: newVehicleId,
       assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
+      // BUGFIX: Same as _assignVehicle — preserve the currently assigned
+      // technicians. Swapping a vehicle should only change the vehicle,
+      // never touch the driver list.
+      technicianIds: _job.technicians.map((t) => t.id).toList(),
     );
 
     if (!mounted) return;
@@ -589,6 +612,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     // directly and handle the result inline.
     final dialogResult = await showDialog<Map<String, dynamic>>(
       context: context,
+      useRootNavigator: false,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialog) {
@@ -840,6 +864,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
 
     showDialog<void>(
       context: context,
+      useRootNavigator: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(

@@ -232,9 +232,14 @@ class JobService {
         'job_id': jobId,
         'vehicle_id': vehicleId,
         'driver_id': driverId,
-        'technician_ids': technicianIds,
         'notes': notes,
         'assigned_by': assignedBy,
+        // BUGFIX: Only include technician_ids when the list is non-empty.
+        // The backend treats an explicit empty array as "clear all technicians".
+        // Omitting the key entirely tells the backend "no change to technicians".
+        // This prevents the scenario where assigning/swapping a vehicle with no
+        // technicians passed in silently wipes drivers that were already saved.
+        if (technicianIds.isNotEmpty) 'technician_ids': technicianIds,
       };
       return await apiService.post(
         '${AppConfig.assignmentsEndpoint}/assign',
