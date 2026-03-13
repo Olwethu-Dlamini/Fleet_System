@@ -182,7 +182,7 @@ class JobAssignmentController {
   static async assignTechnicians(req, res) {
     try {
       const jobId = parseInt(req.params.jobId);
-      const { technician_ids = [], assigned_by } = req.body;
+      const { technician_ids = [], assigned_by, force_override = false } = req.body;
 
       if (isNaN(jobId)) {
         return res.status(400).json({
@@ -202,12 +202,33 @@ class JobAssignmentController {
         ? technician_ids.map(Number).filter(Boolean)
         : [];
 
+      // ─────────────────────────────────────────────────────────────────────
+      // BUG 3 FIX: Read force_override from the request body and thread it
+      // through to JobAssignmentService.assignTechnicians().
+      //
+      // SECURITY: forceOverride is only true when BOTH:
+      //   1. req.user.role === 'admin'  (verifyToken must run before this)
+      //   2. force_override === true in the request body
+      //
+      // req.user is guaranteed by verifyToken on the route. The guard below
+      // is a defensive fallback — if auth middleware is ever misconfigured,
+      // we get a clean 401 instead of a crash.
+      // ─────────────────────────────────────────────────────────────────────
+      if (!req.user) {
+        return res.status(401).json({ success: false, message: 'Not authenticated' });
+      }
+      const forceOverride = req.user.role === 'admin' && force_override === true;
+
       console.log(`📋 Updating technicians for job ${jobId}: [${techIds.join(', ')}]`);
+      if (forceOverride) {
+        console.log('   ⚡ Admin force-override enabled — conflicts will be cleared');
+      }
 
       const updatedJob = await JobAssignmentService.assignTechnicians(
         jobId,
         techIds,
-        parseInt(assigned_by)
+        parseInt(assigned_by),
+        forceOverride   // ← was missing; service was always receiving undefined
       );
 
       console.log('✅ Technicians updated successfully!');

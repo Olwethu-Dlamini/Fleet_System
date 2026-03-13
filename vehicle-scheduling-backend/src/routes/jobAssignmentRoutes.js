@@ -7,9 +7,9 @@
 const express = require('express');
 const router = express.Router();
 
-// ✅ Import required services (auth is applied at app level in server.js)
 const VehicleAvailabilityService = require('../services/vehicleAvailabilityService');
-const JobAssignmentController = require('../controllers/jobAssignmentController');
+const JobAssignmentController    = require('../controllers/jobAssignmentController');
+const { verifyToken }            = require('../middleware/authMiddleware');
 
 /**
  * Job Assignment Routes
@@ -110,13 +110,11 @@ router.post('/check-conflict', async (req, res) => {
   }
 });
 
-// ==========================================
-// NEW: PUT /api/job-assignments/:jobId/technicians
-// PURPOSE: Replace the driver/technician list on an existing job
-//          without changing the vehicle assignment.
-// Body: { "technician_ids": [3, 7], "assigned_by": 1 }
-// ==========================================
-router.put('/:jobId/technicians', JobAssignmentController.assignTechnicians);
+// PUT /api/job-assignments/:jobId/technicians
+// verifyToken is applied explicitly here (not relying on server.js global auth)
+// because req.user.role is needed in the controller to gate force-override.
+// Pattern matches users.js — verifyToken inline on every route that needs req.user.
+router.put('/:jobId/technicians', verifyToken, JobAssignmentController.assignTechnicians);
 
 // ==========================================
 // GET /api/job-assignments/vehicle/:vehicle_id
