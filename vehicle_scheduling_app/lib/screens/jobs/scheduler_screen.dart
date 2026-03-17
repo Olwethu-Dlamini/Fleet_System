@@ -1230,7 +1230,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
             _lLabel('Type:', mob),
             _lDot('Installation', _P.inst, mob),
             _lDot('Delivery', _P.deliv, mob),
-            _lDot('Miscellenous', _P.maint, mob),
+            _lDot('Miscellenous',  const Color.fromARGB(255, 100, 116, 139), mob),
             Container(
               width: 1,
               height: 14,
@@ -1242,7 +1242,7 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
             _lDot('Assigned', _P.sAssigned, mob),
             _lDot('In Progress', _P.sInProgress, mob),
             _lDot('Completed', _P.sCompleted, mob),
-            _lDot('Cancelled', _P.sCancelled, mob),
+            _lDot('Cancelled', const Color.fromARGB(255, 100, 116, 139), mob),
           ],
         ),
       ),

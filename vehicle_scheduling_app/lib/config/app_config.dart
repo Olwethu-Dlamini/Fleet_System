@@ -3,92 +3,123 @@
 // PURPOSE: App-wide configuration and API settings
 //
 // HOW ENDPOINTS WORK:
-//   baseUrl  = 'http://172.16.100.56:3000/api'
+//   baseUrl  = 'http://localhost:3000/api'
 //   endpoint = '/vehicles'
 //   ApiService builds full URL = baseUrl + endpoint
-//                              = 'http://172.16.100.56:3000/api/vehicles'
+//                              = 'http://localhost:3000/api/vehicles'
 //
-// NEVER bake the full URL into an endpoint constant.
-// Endpoints must always be a short relative path like '/jobs'
+// RULE:
+// - NEVER bake full URLs into endpoints
+// - Endpoints must ALWAYS be relative paths
 // ============================================
+
+import 'package:flutter/foundation.dart';
 
 class AppConfig {
   // ==========================================
-  // BASE URLs - one per environment
+  // BASE URLs (per environment)
   // ==========================================
 
-  // Chrome / Web browser
+  // Web / Browser (PRIMARY for now)
   static const String baseUrlWeb = 'http://localhost:3000/api';
 
-  // Android Emulator (10.0.2.2 maps to your PC localhost)
+  // Android Emulator (kept for future use)
   static const String baseUrlAndroid = 'http://10.0.2.2:3000/api';
 
-  // Real Android device on same WiFi
-  static const String baseUrlDevice =
-      'http://172.16.100.56:3000/api'; //for local
-  //static const String baseUrlDevice ='http://3.231.191.15:8080/api'; //foe aws instance
+  // ==========================================
+  // ❌ REAL DEVICE (TEMPORARILY DISABLED)
+  // ==========================================
+  // Reason:
+  // - Not needed for Flutter Web
+  // - Causes CORS / cross-origin issues in browser
+  //
+  // To re-enable later:
+  // 1. Uncomment below
+  // 2. Ensure backend allows external connections
+  // 3. Ensure CORS is configured
+  //
+  // static const String baseUrlDevice =
+  //     'http://172.16.100.56:3000/api';
+  //
+  // Alternative (AWS):
+  // static const String baseUrlDevice =
+  //     'http://3.231.191.15:8080/api';
 
   // ==========================================
-  // ACTIVE BASE URL
-  // ✅ Pointing to real device on WiFi
+  // ACTIVE BASE URL (AUTO SELECT)
   // ==========================================
-  static String get baseUrl => baseUrlDevice;
+  static String get baseUrl {
+    // Web → use localhost
+    if (kIsWeb) {
+      return baseUrlWeb;
+    }
+
+    // Mobile → emulator (safe default)
+    return baseUrlAndroid;
+  }
 
   // ==========================================
   // API ENDPOINTS
-  // Short relative paths ONLY - no full URLs here
-  // ApiService prepends baseUrl automatically
+  // (RELATIVE PATHS ONLY)
   // ==========================================
 
   // GET  /api/health
   static const String healthEndpoint = '/health';
 
-  // GET  /api/vehicles
-  // GET  /api/vehicles/:id
-  // POST /api/vehicles        (admin)
-  // PUT  /api/vehicles/:id    (admin)
-  // DELETE /api/vehicles/:id  (admin)
+  // VEHICLES
+  // GET    /api/vehicles
+  // GET    /api/vehicles/:id
+  // POST   /api/vehicles
+  // PUT    /api/vehicles/:id
+  // DELETE /api/vehicles/:id
   static const String vehiclesEndpoint = '/vehicles';
 
+  // JOBS
   // GET  /api/jobs
   // GET  /api/jobs/:id
   // POST /api/jobs
   static const String jobsEndpoint = '/jobs';
 
+  // JOB ASSIGNMENTS
   // POST /api/job-assignments/assign
   // POST /api/job-assignments/unassign
   // GET  /api/job-assignments/vehicle/:id
   static const String assignmentsEndpoint = '/job-assignments';
 
+  // JOB STATUS
   // POST /api/job-status/update
   // GET  /api/job-status/history/:job_id
   // GET  /api/job-status/allowed-transitions/:job_id
   static const String statusEndpoint = '/job-status';
 
-  // GET  /api/dashboard/summary
-  // GET  /api/dashboard/stats
+  // DASHBOARD
+  // GET /api/dashboard/summary
+  // GET /api/dashboard/stats
   static const String dashboardEndpoint = '/dashboard';
 
-  // GET  /api/reports/jobs-per-vehicle
-  // GET  /api/reports/utilization
-  // GET  /api/reports/quick-stats
+  // REPORTS
+  // GET /api/reports/jobs-per-vehicle
+  // GET /api/reports/utilization
+  // GET /api/reports/quick-stats
   static const String reportsEndpoint = '/reports';
 
-  // GET    /api/users               (admin + scheduler)
-  // GET    /api/users/:id           (admin + scheduler)
-  // POST   /api/users               (admin)
-  // PUT    /api/users/:id           (admin)
-  // DELETE /api/users/:id           (admin)
-  // POST   /api/users/:id/reset-password (admin)
-  static const String usersEndpoint = '/users'; // ← NEW
+  // USERS
+  // GET    /api/users
+  // GET    /api/users/:id
+  // POST   /api/users
+  // PUT    /api/users/:id
+  // DELETE /api/users/:id
+  // POST   /api/users/:id/reset-password
+  static const String usersEndpoint = '/users';
 
-  // GET  /api/availability/drivers?date=&start_time=&end_time=&exclude_job_id=
-  // GET  /api/availability/vehicles?date=&start_time=&end_time=
-  // POST /api/availability/check-drivers { technician_ids, date, start_time, end_time }
-  static const String availabilityEndpoint = '/availability'; // ← NEW
+  // AVAILABILITY
+  // GET  /api/availability/drivers
+  // GET  /api/availability/vehicles
+  // POST /api/availability/check-drivers
+  static const String availabilityEndpoint = '/availability';
 
   // ==========================================
-  // HTTP TIMEOUT
+  // NETWORK CONFIG
   // ==========================================
   static const Duration connectionTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
@@ -100,7 +131,7 @@ class AppConfig {
   static const String appVersion = '1.0.0';
 
   // ==========================================
-  // DEFAULT USER ID
+  // DEFAULT USER
   // ==========================================
   static const int defaultUserId = 1;
 }
