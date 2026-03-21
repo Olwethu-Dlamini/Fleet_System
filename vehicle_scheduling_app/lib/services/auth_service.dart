@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vehicle_scheduling_app/config/app_config.dart';
 import 'package:vehicle_scheduling_app/models/user.dart';
 import 'package:vehicle_scheduling_app/services/api_service.dart';
+import 'package:vehicle_scheduling_app/services/fcm_service.dart';
 
 class AuthService {
   final ApiService _apiService = ApiService();
@@ -31,9 +32,22 @@ class AuthService {
   /// Example:
   ///   final user = await authService.login('admin', 'Admin@123');
   Future<User> login(String username, String password) async {
+    // Get FCM token for push notification registration (NOTIF-06)
+    // Fire-and-forget style — login succeeds even if FCM is not configured.
+    String? fcmToken;
+    try {
+      fcmToken = await FcmService.getToken();
+    } catch (_) {
+      // FCM not available — login still works without push notifications
+    }
+
     final response = await _apiService.post(
       '/auth/login',
-      data: {'username': username.trim(), 'password': password},
+      data: {
+        'username': username.trim(),
+        'password': password,
+        if (fcmToken != null) 'fcm_token': fcmToken,
+      },
     );
 
     // Backend returns: { success, token, user: {...} }
