@@ -206,7 +206,12 @@ Plans:
 - [ ] Scheduler can approve/deny with one tap
 - [ ] All affected parties notified of changes
 
-**Estimated plans:** 3–4
+**Plans:** 3 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Backend: DB migration (time_extension_requests + reschedule_options), TimeExtensionService with impact analysis + suggestion engine, REST routes
+- [ ] 06-02-PLAN.md — Flutter driver/technician side: models, service, provider, request screen, Add More Time button on job detail
+- [ ] 06-03-PLAN.md — Flutter scheduler side: approval screen with impact timeline + suggestion cards, FCM deep-link routing, provider registration
 
 ---
 
