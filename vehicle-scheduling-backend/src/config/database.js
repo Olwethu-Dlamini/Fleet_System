@@ -31,7 +31,23 @@ const pool = mysql.createPool({
   
   // Connection behavior
   enableKeepAlive: true,    // Keep connections alive
-  keepAliveInitialDelay: 0  // Start keep-alive immediately
+  keepAliveInitialDelay: 0, // Start keep-alive immediately
+
+  timezone: '+00:00',       // ADDED: Force UTC for all date/timestamp queries (FOUND-07)
+});
+
+// ============================================
+// GROUP_CONCAT Session Fix (FOUND-08)
+// ============================================
+// Fix GROUP_CONCAT silent truncation: default limit = 1024 bytes, breaks at ~20 technicians.
+// Sets limit to 65536 bytes per connection — handles up to ~1000 technicians per job safely.
+pool.on('connection', function (connection) {
+  connection.query('SET SESSION group_concat_max_len = 65536', (err) => {
+    if (err) {
+      // Log but do not crash — pool continues to function
+      console.error('Warning: failed to set group_concat_max_len on connection:', err.message);
+    }
+  });
 });
 
 // ============================================
