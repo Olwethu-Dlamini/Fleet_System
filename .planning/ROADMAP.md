@@ -47,13 +47,14 @@
 - [ ] Security middleware active on all routes
 - [ ] All existing functionality still works (regression check)
 
-**Plans:** 4/4 plans complete
+**Plans:** 5 plans (4 complete + 1 gap closure)
 
 Plans:
 - [x] 01-01-PLAN.md — Database migration: tenant_id, sequence table, UTC timezone, GROUP_CONCAT fix, composite indexes
 - [x] 01-02-PLAN.md — Race condition fixes: SELECT...FOR UPDATE in job assignment, atomic job number sequence
 - [x] 01-03-PLAN.md — Security middleware: JWT startup guard, helmet, rate limiting, express-validator on all routes
 - [x] 01-04-PLAN.md — Structured logging: pino logger replacing all console.log, Jest test scaffold
+- [ ] 01-05-PLAN.md — Gap closure: remove JWT fallback from authController.js, add tenant_id to JWT payload, sweep remaining console.* across src/
 
 ---
 
@@ -297,3 +298,4 @@ Phase 9 (Docs) ←── Phase 8
 *Roadmap created: 2026-03-21*
 *Last updated: 2026-03-21 after research synthesis*
 *Phase 1 plans created: 2026-03-21*
+*Phase 1 gap closure plan added: 2026-03-21*
