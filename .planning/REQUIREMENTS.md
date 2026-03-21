@@ -10,7 +10,7 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Foundation & Security (FOUND)
 
 - [x] **FOUND-01**: Add `tenant_id` column to all tables for multi-tenant isolation
-- [ ] **FOUND-02**: Fix race condition in job assignment — wrap availability check + insert in `SELECT ... FOR UPDATE` transaction
+- [x] **FOUND-02**: Fix race condition in job assignment — wrap availability check + insert in `SELECT ... FOR UPDATE` transaction
 - [x] **FOUND-03**: Fix job number generation race condition — use atomic sequence table
 - [ ] **FOUND-04**: Remove hardcoded JWT secret fallback — enforce env variable
 - [ ] **FOUND-05**: Add `helmet` and `express-rate-limit` middleware to server
