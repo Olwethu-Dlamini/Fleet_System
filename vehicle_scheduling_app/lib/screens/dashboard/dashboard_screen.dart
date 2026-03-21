@@ -35,10 +35,12 @@
 // ============================================
 
 import 'dart:math' as math;
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vehicle_scheduling_app/config/app_config.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
+import 'package:vehicle_scheduling_app/models/job.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
@@ -156,6 +158,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic> _summary = {};
+  List<Map<String, dynamic>> _chartData = [];
+  String _scheduleView = 'drivers'; // DASH-03 toggle
 
   @override
   void initState() {
@@ -231,6 +235,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       }
     } catch (_) {}
+
+    // DASH-01: Fetch chart data for hourly job distribution bar chart
+    try {
+      final chartRes = await _apiService.get(AppConfig.dashboardChartEndpoint);
+      if (chartRes['success'] == true && chartRes['hourly'] is List) {
+        if (mounted) {
+          setState(() {
+            _chartData = List<Map<String, dynamic>>.from(chartRes['hourly']);
+          });
+        }
+      }
+    } catch (_) {
+      // Non-fatal — chart stays empty if endpoint unavailable
+      if (mounted) setState(() => _chartData = []);
+    }
 
     _computeSummaryLocally();
   }
@@ -767,6 +786,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildWelcomeHeader(auth),
                 const SizedBox(height: 20),
                 _buildStatCards(_summary),
+                const SizedBox(height: 16),
+                // DASH-01: Jobs today bar chart card
+                _buildJobsChartCard(),
                 const SizedBox(height: 24),
                 if (auth.isAdmin) ...[
                   _buildUsersQuickCard(),
@@ -778,11 +800,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   _buildVehicleStatusList(vehicleStatus),
                   const SizedBox(height: 24),
                 ],
-                _buildSectionTitle("Today's Jobs"),
+                // DASH-03: Drivers/Clients toggle row
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildSectionTitle("Today's Jobs"),
+                    SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'drivers', label: Text('Drivers')),
+                        ButtonSegment(value: 'clients', label: Text('Clients')),
+                      ],
+                      selected: {_scheduleView},
+                      onSelectionChanged: (s) =>
+                          setState(() => _scheduleView = s.first),
+                      style: ButtonStyle(
+                        visualDensity: VisualDensity.compact,
+                        padding: WidgetStateProperty.all(
+                          const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
-                todaysJobs.isEmpty
-                    ? _buildEmptyJobs()
-                    : _buildJobsList(todaysJobs),
+                if (todaysJobs.isEmpty)
+                  _buildEmptyJobs()
+                else if (_scheduleView == 'drivers')
+                  _buildJobsList(todaysJobs.cast<dynamic>())
+                else
+                  _buildClientGroupedJobs(todaysJobs),
                 const SizedBox(height: 24),
               ],
             ),
@@ -813,6 +859,195 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  // DASH-01: Bar chart card showing hourly job distribution
+  Widget _buildJobsChartCard() {
+    final totalJobs = _chartData.fold<int>(
+      0,
+      (sum, entry) => sum + ((entry['count'] as num?)?.toInt() ?? 0),
+    );
+
+    // Build a map of hour -> count for O(1) lookup
+    final Map<int, int> hourCounts = {};
+    for (final entry in _chartData) {
+      final hour = (entry['hour'] as num?)?.toInt();
+      final count = (entry['count'] as num?)?.toInt() ?? 0;
+      if (hour != null) hourCounts[hour] = count;
+    }
+
+    final maxCount =
+        hourCounts.values.isEmpty
+            ? 0
+            : hourCounts.values.reduce((a, b) => a > b ? a : b);
+    final maxY = (maxCount + 1).toDouble().clamp(5.0, double.infinity);
+
+    return Card(
+      elevation: 3,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Jobs Today',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '$totalJobs total',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6366F1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_chartData.isEmpty)
+              const SizedBox(
+                height: 90,
+                child: Center(
+                  child: Text(
+                    'No jobs scheduled',
+                    style: TextStyle(
+                      color: AppTheme.textHint,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              )
+            else
+              SizedBox(
+                height: 90,
+                child: BarChart(
+                  BarChartData(
+                    maxY: maxY,
+                    barGroups: List.generate(24, (hour) {
+                      final count = hourCounts[hour] ?? 0;
+                      return BarChartGroupData(
+                        x: hour,
+                        barRods: [
+                          BarChartRodData(
+                            toY: count.toDouble(),
+                            color: const Color(0xFF6366F1),
+                            width: 6,
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(3),
+                              topRight: Radius.circular(3),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                    titlesData: FlTitlesData(
+                      show: true,
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          getTitlesWidget: (value, meta) {
+                            final hour = value.toInt();
+                            if (hour == 0 ||
+                                hour == 6 ||
+                                hour == 12 ||
+                                hour == 18) {
+                              return Text(
+                                '${hour}h',
+                                style: const TextStyle(
+                                  fontSize: 9,
+                                  color: Colors.grey,
+                                ),
+                              );
+                            }
+                            return const SizedBox.shrink();
+                          },
+                          reservedSize: 18,
+                        ),
+                      ),
+                      leftTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(showTitles: false),
+                      ),
+                    ),
+                    gridData: const FlGridData(show: false),
+                    borderData: FlBorderData(show: false),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // DASH-03: Client-grouped jobs view
+  Widget _buildClientGroupedJobs(List<Job> jobs) {
+    // Group jobs by customerName
+    final Map<String, List<Job>> grouped = {};
+    for (final job in jobs) {
+      grouped.putIfAbsent(job.customerName, () => []).add(job);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: grouped.entries.map((entry) {
+        final clientName = entry.key;
+        final clientJobs = entry.value;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, top: 4),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline,
+                    size: 15,
+                    color: AppTheme.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      '$clientName  (${clientJobs.length})',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _buildJobsList(clientJobs.cast<dynamic>()),
+            const SizedBox(height: 8),
+          ],
+        );
+      }).toList(),
     );
   }
 
@@ -1077,14 +1312,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: data.color.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(14),
+                  // DASH-04: Badge overlay showing count on the icon
+                  Badge(
+                    label: Text(
+                      data.value,
+                      style: const TextStyle(fontSize: 10, color: Colors.white),
                     ),
-                    child: Icon(data.icon, color: data.color, size: 26),
+                    isLabelVisible:
+                        int.tryParse(data.value) != null &&
+                        int.parse(data.value) > 0,
+                    backgroundColor: data.color,
+                    child: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        color: data.color.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(data.icon, color: data.color, size: 26),
+                    ),
                   ),
                   const SizedBox(height: 14),
                   Text(
