@@ -10,6 +10,7 @@ class Vehicle {
   final String vehicleType;
   final double? capacityKg;
   final bool isActive;
+  final bool isInMaintenance;
   final DateTime? lastMaintenanceDate;
   final String? notes;
   final DateTime createdAt;
@@ -22,6 +23,7 @@ class Vehicle {
     required this.vehicleType,
     this.capacityKg,
     required this.isActive,
+    this.isInMaintenance = false,
     this.lastMaintenanceDate,
     this.notes,
     required this.createdAt,
@@ -41,6 +43,7 @@ class Vehicle {
           ? double.parse(json['capacity_kg'].toString())
           : null,
       isActive: json['is_active'] == 1 || json['is_active'] == true,
+      isInMaintenance: json['is_in_maintenance'] == 1 || json['is_in_maintenance'] == true,
       lastMaintenanceDate: json['last_maintenance_date'] != null
           ? DateTime.parse(json['last_maintenance_date'])
           : null,
@@ -61,6 +64,7 @@ class Vehicle {
       'vehicle_type': vehicleType,
       'capacity_kg': capacityKg,
       'is_active': isActive ? 1 : 0,
+      'is_in_maintenance': isInMaintenance ? 1 : 0,
       'last_maintenance_date': lastMaintenanceDate?.toIso8601String(),
       'notes': notes,
       'created_at': createdAt.toIso8601String(),
@@ -97,6 +101,7 @@ class Vehicle {
     String? vehicleType,
     double? capacityKg,
     bool? isActive,
+    bool? isInMaintenance,
     DateTime? lastMaintenanceDate,
     String? notes,
     DateTime? createdAt,
@@ -109,6 +114,7 @@ class Vehicle {
       vehicleType: vehicleType ?? this.vehicleType,
       capacityKg: capacityKg ?? this.capacityKg,
       isActive: isActive ?? this.isActive,
+      isInMaintenance: isInMaintenance ?? this.isInMaintenance,
       lastMaintenanceDate: lastMaintenanceDate ?? this.lastMaintenanceDate,
       notes: notes ?? this.notes,
       createdAt: createdAt ?? this.createdAt,

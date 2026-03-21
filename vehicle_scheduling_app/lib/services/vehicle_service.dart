@@ -131,4 +131,29 @@ class VehicleService {
       rethrow;
     }
   }
+
+  // ══════════════════════════════════════════
+  // SWAP VEHICLE ON JOB  ← SCHED-02
+  // PUT /api/jobs/:jobId/swap-vehicle
+  // ══════════════════════════════════════════
+  Future<Map<String, dynamic>> swapVehicle(
+    int jobId,
+    int newVehicleId, {
+    String? note,
+  }) async {
+    try {
+      final data = <String, dynamic>{'new_vehicle_id': newVehicleId};
+      if (note != null && note.isNotEmpty) data['note'] = note;
+      // AppConfig.jobsEndpoint is a pre-existing getter ('/jobs')
+      final response = await apiService.put(
+        '${AppConfig.jobsEndpoint}/$jobId/swap-vehicle',
+        data: data,
+      );
+      if (response['success'] == true) return response;
+      throw Exception(response['message'] ?? 'Failed to swap vehicle');
+    } catch (e) {
+      print('VehicleService.swapVehicle error: $e');
+      rethrow;
+    }
+  }
 }
