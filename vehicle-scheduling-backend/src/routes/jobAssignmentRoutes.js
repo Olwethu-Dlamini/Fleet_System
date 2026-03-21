@@ -10,15 +10,37 @@ const router = express.Router();
 const VehicleAvailabilityService = require('../services/vehicleAvailabilityService');
 const JobAssignmentController    = require('../controllers/jobAssignmentController');
 const { verifyToken }            = require('../middleware/authMiddleware');
+const Job                        = require('../models/Job');
 const logger = require('../config/logger');
 const log    = logger.child({ service: 'job-assignment-route' });
 
 /**
  * Job Assignment Routes
- * 
+ *
  * Base URL: /api/job-assignments
  * Note: Auth middleware is applied globally in server.js for /api/* routes
  */
+
+// ==========================================
+// GET /api/job-assignments/driver-load
+// PURPOSE: Return all active drivers with job_count, rank, and below_average
+//          flag for load-balanced assignment picker in the Flutter UI.
+// QUERY PARAMS: range=weekly|monthly|yearly (default: weekly)
+// ==========================================
+router.get('/driver-load', verifyToken, async (req, res) => {
+  try {
+    const range = req.query.range || 'weekly';
+    if (!['weekly', 'monthly', 'yearly'].includes(range)) {
+      return res.status(400).json({ success: false, message: 'Invalid range. Use weekly, monthly, or yearly.' });
+    }
+    const tenantId = req.user.tenant_id;
+    const drivers = await Job.getDriverLoadStats(tenantId, range);
+    return res.status(200).json({ success: true, data: drivers });
+  } catch (err) {
+    log.error({ err }, 'Failed to get driver load stats');
+    return res.status(500).json({ success: false, message: 'Failed to get driver load stats' });
+  }
+});
 
 // ==========================================
 // POST /api/job-assignments/assign

@@ -873,6 +873,59 @@ class Job {
   }
 
   // ==========================================
+  // FUNCTION: getDriverLoadStats
+  // PURPOSE: Return active drivers/technicians with job_count, rank,
+  //          and below_average flag for the given time range.
+  //          Used by GET /api/job-assignments/driver-load to power
+  //          the load-balanced assignment picker in the Flutter UI.
+  // PARAMS:
+  //   tenantId - scopes results to a specific tenant
+  //   range    - 'weekly' (7d) | 'monthly' (30d) | 'yearly' (365d)
+  // RETURNS: Array of { id, full_name, job_count, rank, below_average }
+  //          rank 1 = fewest jobs (most available / "Suggested")
+  //          below_average = true when job_count < average across all drivers
+  // ==========================================
+  static async getDriverLoadStats(tenantId, range = 'weekly') {
+    try {
+      const rangeMap = {
+        weekly:  'AND jt.assigned_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)',
+        monthly: 'AND jt.assigned_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)',
+        yearly:  'AND jt.assigned_at >= DATE_SUB(NOW(), INTERVAL 365 DAY)',
+      };
+      const rangeClause = rangeMap[range] || rangeMap.weekly;
+
+      const sql = `
+        SELECT u.id, u.full_name, COUNT(jt.id) AS job_count
+        FROM users u
+        LEFT JOIN job_technicians jt ON jt.user_id = u.id ${rangeClause}
+        WHERE u.role IN ('driver','technician')
+          AND u.is_active = 1
+          AND u.tenant_id = ?
+        GROUP BY u.id, u.full_name
+        ORDER BY job_count ASC, u.full_name ASC
+      `;
+
+      const [rows] = await db.query(sql, [tenantId]);
+
+      if (rows.length === 0) return [];
+
+      const total = rows.reduce((sum, r) => sum + Number(r.job_count), 0);
+      const avg   = total / rows.length;
+
+      return rows.map((row, i) => ({
+        id:            row.id,
+        full_name:     row.full_name,
+        job_count:     Number(row.job_count),
+        rank:          i + 1,
+        below_average: Number(row.job_count) < avg,
+      }));
+    } catch (error) {
+      logger.error({ err: error, tenantId, range }, 'Error in Job.getDriverLoadStats');
+      throw error;
+    }
+  }
+
+  // ==========================================
   // BONUS FUNCTION: getJobsByDateRange
   // PURPOSE: Get jobs within a date range
   // RETURNS: Array of jobs

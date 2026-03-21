@@ -236,6 +236,13 @@ class JobAssignmentService {
     // ============================================
     const completeAssignment = await this.getAssignmentDetails(assignmentId);
 
+    // Audit trail — non-critical, runs outside transaction
+    const driverId = technician_ids.length > 0 ? technician_ids[0] : driver_id;
+    await JobAssignmentService._logAssignmentHistory(
+      job_id, 'create', null, driverId, assigned_by,
+      completeAssignment.tenant_id || null
+    );
+
     return {
       success: true,
       message: 'Job assigned successfully',
@@ -310,6 +317,14 @@ class JobAssignmentService {
 
     // Atomic replace of technician list (same for both paths)
     await Job.assignTechnicians(jobId, technicianIds, assignedBy, forceOverride);
+
+    // Audit trail — log technician_add for each new technician (non-critical)
+    for (const techId of technicianIds) {
+      await JobAssignmentService._logAssignmentHistory(
+        jobId, 'technician_add', null, techId, assignedBy,
+        job.tenant_id || null
+      );
+    }
 
     return await JobAssignmentService.getJobWithTechnicians(jobId);
   }
@@ -402,6 +417,12 @@ class JobAssignmentService {
       }
     }
 
+    // Audit trail — non-critical, runs outside transaction
+    await JobAssignmentService._logAssignmentHistory(
+      jobId, 'cancel', assignment.driver_id || null, null, changedBy,
+      job.tenant_id || null
+    );
+
     return {
       success: true,
       message: `Job ${job.job_number} unassigned successfully. Status changed to pending.`,
@@ -435,8 +456,11 @@ class JobAssignmentService {
       );
     }
 
+    // Capture previous driver for audit trail before assignment overwrites it
+    const previousDriverId = job.driver_id || null;
+
     // Directly assign to new vehicle (uses the FOR UPDATE transactional path)
-    return await this.assignJobToVehicle({
+    const result = await this.assignJobToVehicle({
       job_id,
       vehicle_id: new_vehicle_id,
       driver_id,
@@ -444,6 +468,15 @@ class JobAssignmentService {
       notes: notes || `Reassigned from ${job.vehicle_name || 'previous vehicle'}`,
       assigned_by
     });
+
+    // Audit trail for reassign event — non-critical, runs outside transaction
+    const newDriverId = technician_ids.length > 0 ? technician_ids[0] : driver_id;
+    await JobAssignmentService._logAssignmentHistory(
+      job_id, 'reassign', previousDriverId, newDriverId, assigned_by,
+      job.tenant_id || null
+    );
+
+    return result;
   }
   
   // ==========================================
@@ -596,6 +629,24 @@ class JobAssignmentService {
   // ==========================================
   static async getJobWithTechnicians(jobId) {
     return await Job.getJobById(jobId);
+  }
+
+  // ==========================================
+  // PRIVATE HELPER: _logAssignmentHistory
+  // PURPOSE: Write an audit row to assignment_history after any assignment
+  //          mutation. Non-critical — errors are swallowed so they never
+  //          surface to the caller or roll back a committed transaction.
+  // ==========================================
+  static async _logAssignmentHistory(jobId, eventType, oldUserId, newUserId, changedBy, tenantId) {
+    try {
+      await db.query(
+        `INSERT INTO assignment_history (job_id, event_type, old_user_id, new_user_id, changed_by, changed_at, tenant_id)
+         VALUES (?, ?, ?, ?, ?, NOW(), ?)`,
+        [jobId, eventType, oldUserId || null, newUserId || null, changedBy, tenantId || null]
+      );
+    } catch (err) {
+      logger.error({ err, jobId, eventType }, 'Failed to log assignment history');
+    }
   }
 }
 
