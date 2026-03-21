@@ -89,6 +89,36 @@ const PERMISSIONS = {
   'users:create': [USER_ROLE.ADMIN],
   'users:update': [USER_ROLE.ADMIN],
   'users:delete': [USER_ROLE.ADMIN],
+
+  // ── Maintenance permissions ─────────────────────────────────────────────
+  'maintenance:read'  : [USER_ROLE.ADMIN, USER_ROLE.DISPATCHER, USER_ROLE.SCHEDULER, USER_ROLE.TECHNICIAN],
+  'maintenance:create': [USER_ROLE.ADMIN],
+  'maintenance:update': [USER_ROLE.ADMIN],
+  'maintenance:delete': [USER_ROLE.ADMIN],
+
+  // ── Settings permissions ────────────────────────────────────────────────
+  'settings:read'  : [USER_ROLE.ADMIN],
+  'settings:update': [USER_ROLE.ADMIN],
+};
+
+// ============================================
+// Maintenance Types (Phase 2)
+// ============================================
+const MAINTENANCE_TYPE = {
+  SERVICE     : 'service',
+  REPAIR      : 'repair',
+  INSPECTION  : 'inspection',
+  TYRE_CHANGE : 'tyre_change',
+  OTHER       : 'other',
+};
+
+// ============================================
+// Maintenance Status (Phase 2)
+// ============================================
+const MAINTENANCE_STATUS = {
+  SCHEDULED  : 'scheduled',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED  : 'completed',
 };
 
 // ============================================
@@ -176,4 +206,6 @@ module.exports = {
   VALIDATION_RULES,
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
+  MAINTENANCE_TYPE,
+  MAINTENANCE_STATUS,
 };
