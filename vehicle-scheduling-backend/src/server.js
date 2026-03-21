@@ -6,15 +6,17 @@ require('dotenv').config();
 // FOUND-04: Fail fast — crash if JWT_SECRET is not configured
 // Never run with a fallback secret in any environment
 if (!process.env.JWT_SECRET) {
-  console.error('FATAL: JWT_SECRET environment variable is not set. Server will not start.');
+  process.stderr.write('FATAL: JWT_SECRET environment variable is not set. Server will not start.\n');
   process.exit(1);
 }
 
-const express = require('express');
-const cors    = require('cors');
-const bcrypt  = require('bcryptjs');
-const jwt     = require('jsonwebtoken');
-const helmet  = require('helmet');
+const express  = require('express');
+const cors     = require('cors');
+const bcrypt   = require('bcryptjs');
+const jwt      = require('jsonwebtoken');
+const helmet   = require('helmet');
+const pinoHttp = require('pino-http');
+const logger   = require('./config/logger');
 
 const db         = require('./config/database');
 const routes     = require('./routes');
@@ -71,14 +73,17 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
 }));
 
-// 2. Body parsers
+// 2. pino-http request logging — after cors(), before helmet and routes
+app.use(pinoHttp({ logger }));
+
+// 3. Body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// 3. Security headers — ONLY on /api routes (NOT /swagger — Pitfall 2: helmet CSP blocks Swagger inline scripts)
+// 4. Security headers — ONLY on /api routes (NOT /swagger — Pitfall 2: helmet CSP blocks Swagger inline scripts)
 app.use('/api', helmet());
 
-// 4. General API rate limit — 200 req/IP/15min
+// 5. General API rate limit — 200 req/IP/15min
 app.use('/api', apiLimiter);
 
 // ======================
@@ -112,6 +117,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     );
 
     if (rows.length === 0) {
+      logger.warn({ username }, 'Login failed: user not found');
       return res.status(401).json({ success: false, message: 'Invalid username or password' });
     }
 
@@ -119,6 +125,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
     const passwordMatch = await bcrypt.compare(password, user.password_hash);
     if (!passwordMatch) {
+      logger.warn({ username }, 'Login failed: invalid credentials');
       return res.status(401).json({ success: false, message: 'Invalid username or password' });
     }
 
@@ -138,6 +145,8 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       { expiresIn: JWT_EXPIRES }
     );
 
+    logger.info({ userId: user.id, role: normalisedRole }, 'User logged in');
+
     return res.status(200).json({
       success  : true,
       token    : token,
@@ -153,7 +162,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Login error:', error.message);
+    logger.error({ err: error }, 'Login error');
     return res.status(500).json({ success: false, message: 'Login failed: ' + error.message });
   }
 });
@@ -219,7 +228,7 @@ app.use((req, res) => {
 
 // Global error handler
 app.use((err, req, res, next) => {
-  console.error('Global error:', err.message);
+  logger.error({ err }, 'Global error handler');
   res.status(err.status || 500).json({
     success: false,
     error  : process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
@@ -229,24 +238,21 @@ app.use((err, req, res, next) => {
 // ======================
 // START SERVER
 // ======================
-(async () => {
-  try {
-    await db.query('SELECT 1 as test');
-    console.log('Database connection successful');
+// Export app for testing (does not start server when imported as module)
+if (require.main === module) {
+  (async () => {
+    try {
+      await db.query('SELECT 1 as test');
+      logger.info('Database connection verified');
 
-    app.listen(PORT, () => {
-      console.log('\n' + '='.repeat(50));
-      console.log('Vehicle Scheduling API');
-      console.log('='.repeat(50));
-      console.log(`Server:  http://localhost:${PORT}`);
-      console.log(`API:     http://localhost:${PORT}/api`);
-      console.log(`Login:   POST http://localhost:${PORT}/api/auth/login`);
-      console.log('='.repeat(50) + '\n');
-      console.log('Roles:  admin | scheduler | technician');
-      console.log('='.repeat(50) + '\n');
-    });
-  } catch (err) {
-    console.error('Database connection failed:', err.message);
-    process.exit(1);
-  }
-})();
+      app.listen(PORT, () => {
+        logger.info({ port: PORT }, `FleetScheduler API listening on port ${PORT}`);
+      });
+    } catch (err) {
+      logger.error({ err }, 'Database connection failed');
+      process.exit(1);
+    }
+  })();
+}
+
+module.exports = app;
