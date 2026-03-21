@@ -42,11 +42,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Job Assignment & Load Balancing (ASGN)
 
-- [ ] **ASGN-01**: Show total historical job count next to each driver name during assignment
-- [ ] **ASGN-02**: Green glow/highlight on drivers with fewer jobs (visual load indicator)
-- [ ] **ASGN-03**: "Suggested" chip on lowest-load available driver
-- [ ] **ASGN-04**: Enforce one driver per vehicle, allow multiple technicians per job
-- [ ] **ASGN-05**: Assignment history table for audit trail (`assignment_history`)
+- [x] **ASGN-01**: Show total historical job count next to each driver name during assignment
+- [x] **ASGN-02**: Green glow/highlight on drivers with fewer jobs (visual load indicator)
+- [x] **ASGN-03**: "Suggested" chip on lowest-load available driver
+- [x] **ASGN-04**: Enforce one driver per vehicle, allow multiple technicians per job
+- [x] **ASGN-05**: Assignment history table for audit trail (`assignment_history`)
 
 ### Job Status Automation (STAT)
 
