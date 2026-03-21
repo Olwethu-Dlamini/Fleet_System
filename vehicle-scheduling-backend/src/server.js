@@ -147,6 +147,26 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
 
     logger.info({ userId: user.id, role: normalisedRole }, 'User logged in');
 
+    // NOTIF-06: Subscribe FCM token to user-specific topic (fire-and-forget)
+    // Topic naming: driver_{userId} for technicians, scheduler_{userId} for admin/scheduler
+    const fcmToken = req.body.fcm_token;
+    if (fcmToken) {
+      try {
+        const firebaseAdmin = require('./config/firebase');
+        const topicName = (normalisedRole === 'technician' || normalisedRole === 'driver')
+          ? `driver_${user.id}`
+          : `scheduler_${user.id}`;
+        // Fire-and-forget — do NOT await, do NOT block login response
+        firebaseAdmin.messaging()
+          .subscribeToTopic([fcmToken], topicName)
+          .then(() => logger.info({ userId: user.id, topic: topicName }, 'FCM topic subscribed'))
+          .catch(err => logger.warn({ userId: user.id, topic: topicName, err: err.message }, 'FCM topic subscription failed'));
+      } catch (err) {
+        // Firebase not configured — skip silently, login still succeeds
+        logger.debug({ err: err.message }, 'Firebase not available — skipping FCM subscription');
+      }
+    }
+
     return res.status(200).json({
       success  : true,
       token    : token,
