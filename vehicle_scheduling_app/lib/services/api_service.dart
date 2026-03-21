@@ -113,6 +113,29 @@ class ApiService {
   }
 
   // ==========================================
+  // PATCH
+  // ==========================================
+  Future<Map<String, dynamic>> patch(
+    String endpoint, {
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      print('PATCH $baseUrl$endpoint');
+      final response = await _client
+          .patch(
+            Uri.parse('$baseUrl$endpoint'),
+            headers: _headers,
+            body: data != null ? jsonEncode(data) : null,
+          )
+          .timeout(AppConfig.connectionTimeout);
+      return _handleResponse(response);
+    } catch (e) {
+      print('PATCH error: $e');
+      throw _handleError(e);
+    }
+  }
+
+  // ==========================================
   // DELETE
   // ==========================================
   Future<Map<String, dynamic>> delete(String endpoint) async {

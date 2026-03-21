@@ -14,6 +14,7 @@ import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
+import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
 import 'package:vehicle_scheduling_app/screens/login_screen.dart';
 import 'package:vehicle_scheduling_app/screens/dashboard/dashboard_screen.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/jobs_list_screen.dart';
@@ -23,14 +24,25 @@ import 'package:vehicle_scheduling_app/screens/vehicles/vehicles_list_screen.dar
 import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
 import 'package:vehicle_scheduling_app/screens/reports/reports_screen.dart'; // ← NEW
 import 'package:vehicle_scheduling_app/screens/settings/admin_settings_screen.dart';
+import 'package:vehicle_scheduling_app/services/fcm_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await FcmService.initialize();
+  } catch (e) {
+    // Firebase not configured (missing google-services.json) — app still
+    // works without push notifications. Graceful degradation by design.
+    // ignore: avoid_print
+    print('FCM initialization skipped: $e');
+  }
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => JobProvider()),
         ChangeNotifierProvider(create: (_) => VehicleProvider()),
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
       ],
       child: const VehicleSchedulingApp(),
     ),
