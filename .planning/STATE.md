@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 01-04 (complete)
+current_plan: 01-05 (complete)
 status: phase-complete
-stopped_at: Completed 01-04-PLAN.md
-last_updated: "2026-03-21T10:52:00.000Z"
+stopped_at: Completed 01-05-PLAN.md
+last_updated: "2026-03-21T11:21:56.171Z"
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 5
+  completed_plans: 5
   percent: 100
 ---
 
@@ -32,15 +32,15 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Phase
 
 **Phase:** 1 — Foundation & Security Hardening
-**Status:** Complete (01-01, 01-02, 01-03, 01-04 complete)
-**Current Plan:** 01-04 (complete)
+**Status:** Complete (01-01, 01-02, 01-03, 01-04, 01-05 complete)
+**Current Plan:** 01-05 (complete)
 **Requirements:** FOUND-01 to FOUND-10
 
 ## Phase Progress
 
 | Phase | Name | Status | Plans |
 |-------|------|--------|-------|
-| 1 | Foundation & Security Hardening | ● Complete | 4/4 |
+| 1 | Foundation & Security Hardening | ● Complete | 5/5 |
 | 2 | User, Vehicle & Scheduler Enhancements | ○ Not started | 0/0 |
 | 3 | Job Assignment & Status Automation | ○ Not started | 0/0 |
 | 4 | Dashboard & Views | ○ Not started | 0/0 |
@@ -83,6 +83,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | Child logger per service with service name in context for easy log filtering | FOUND-10 |
 | 2026-03-21 | server.js require.main guard — enables supertest to import app without starting DB | Testing |
 | 2026-03-21 | Integration tests accept 401 on protected routes — validates route exists and auth fires | FOUND-06 |
+| 2026-03-21 | JWT fallback secret removed entirely — startup guard in server.js enforces JWT_SECRET at boot | FOUND-04 gap closure |
+| 2026-03-21 | tenant_id added to authController jwt.sign() — both login paths now produce identical JWT payloads | FOUND-04 gap closure |
+| 2026-03-21 | All console.* replaced with pino child loggers across all 16 src/ files — FOUND-10 fully satisfied | FOUND-10 gap closure |
 
 ## Performance Metrics
 
@@ -92,11 +95,12 @@ Progress: [██████████] 100% (Phase 1)
 | 01 | 02 | 9 | 2/2 | 2 |
 | 01 | 03 | 3 | 3/3 | 8 |
 | 01 | 04 | 18 | 3/3 | 10 |
+| 01 | 05 | 18 | 2/2 | 16 |
 
 ## Session
 
-**Last session:** 2026-03-21T10:52:00.000Z
-**Stopped at:** Completed 01-04-PLAN.md (Phase 1 complete)
+**Last session:** 2026-03-21T11:21:56.168Z
+**Stopped at:** Completed 01-05-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*

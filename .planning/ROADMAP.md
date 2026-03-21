@@ -8,7 +8,7 @@
 
 | Phase | Name | Requirements | Risk | Dependencies |
 |-------|------|-------------|------|--------------|
-| 1 | Foundation & Security Hardening | 4/4 | Complete   | 2026-03-21 |
+| 1 | Foundation & Security Hardening | 5/5 | Complete   | 2026-03-21 |
 | 2 | User, Vehicle & Scheduler Enhancements | USR-01–03, MAINT-01–05, SCHED-01–04 | MEDIUM | Phase 1 (tenant_id) |
 | 3 | Job Assignment & Status Automation | ASGN-01–05, STAT-01–04 | MEDIUM | Phase 1 (race condition fixes) |
 | 4 | Dashboard & Views | DASH-01–04 | LOW | Phase 2 (scheduler role), Phase 3 (job counts) |
@@ -47,14 +47,14 @@
 - [ ] Security middleware active on all routes
 - [ ] All existing functionality still works (regression check)
 
-**Plans:** 5 plans (4 complete + 1 gap closure)
+**Plans:** 5/5 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — Database migration: tenant_id, sequence table, UTC timezone, GROUP_CONCAT fix, composite indexes
 - [x] 01-02-PLAN.md — Race condition fixes: SELECT...FOR UPDATE in job assignment, atomic job number sequence
 - [x] 01-03-PLAN.md — Security middleware: JWT startup guard, helmet, rate limiting, express-validator on all routes
 - [x] 01-04-PLAN.md — Structured logging: pino logger replacing all console.log, Jest test scaffold
-- [ ] 01-05-PLAN.md — Gap closure: remove JWT fallback from authController.js, add tenant_id to JWT payload, sweep remaining console.* across src/
+- [x] 01-05-PLAN.md — Gap closure: remove JWT fallback from authController.js, add tenant_id to JWT payload, sweep remaining console.* across src/
 
 ---
 
