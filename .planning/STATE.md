@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 05-01-PLAN.md
-last_updated: "2026-03-21T17:36:07.967Z"
+stopped_at: Completed 05-03-PLAN.md
+last_updated: "2026-03-21T17:50:02.171Z"
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 17
-  completed_plans: 15
+  completed_plans: 17
   percent: 100
 ---
 
@@ -110,6 +110,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | FCM_SERVICE_ACCOUNT_PATH not in startup guard — Firebase optional for dev, server starts without it | 05-01 NOTIF |
 | 2026-03-21 | No retry on FCM/email failures — log warn and move on, in-app record inserted first for audit trail | 05-01 NOTIF |
 | 2026-03-21 | Notification dedup via 20-min NOT EXISTS subquery on notifications table — prevents storms | 05-01 NOTIF |
+| 2026-03-21 | Kotlin DSL google-services registration in settings.gradle.kts plugins{} block — correct AGP 8.x pattern | 05-02 FCM |
+| 2026-03-21 | FCM topic naming: driver_{userId} for technician/driver, scheduler_{userId} for admin/scheduler | 05-02 FCM |
+| 2026-03-21 | compileSdk=35, Java 17, coreLibraryDesugaring required by firebase_messaging | 05-02 FCM |
 
 ## Performance Metrics
 
@@ -131,11 +134,13 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 04 P02 | 12 | 2 tasks | 3 files |
 | Phase 04 P03 | 3 | 1 tasks | 2 files |
 | Phase 05 P01 | 6 | 2 tasks | 9 files |
+| Phase 05 P02 | 7 | 3 tasks | 8 files |
+| Phase 05 P03 | 8 | 2 tasks | 9 files |
 
 ## Session
 
-**Last session:** 2026-03-21T17:36:01.992Z
-**Stopped at:** Completed 05-01-PLAN.md
+**Last session:** 2026-03-21T17:50:02.166Z
+**Stopped at:** Completed 05-03-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
