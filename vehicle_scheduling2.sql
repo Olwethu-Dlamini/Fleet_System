@@ -34,6 +34,8 @@ CREATE TABLE `jobs` (
   `customer_name` varchar(100) NOT NULL,
   `customer_phone` varchar(20) DEFAULT NULL,
   `customer_address` text NOT NULL,
+  `destination_lat` double DEFAULT NULL,
+  `destination_lng` double DEFAULT NULL,
   `description` text DEFAULT NULL,
   `scheduled_date` date NOT NULL,
   `scheduled_time_start` time NOT NULL,
@@ -1074,3 +1076,46 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+-- ============================================================
+-- Phase 3: Job Assignment & Status Automation
+-- assignment_history table
+-- ============================================================
+CREATE TABLE IF NOT EXISTS assignment_history (
+  id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  job_id       INT UNSIGNED NOT NULL,
+  event_type   ENUM('create','reassign','swap','cancel','technician_add','technician_remove') NOT NULL,
+  old_user_id  INT UNSIGNED DEFAULT NULL,
+  new_user_id  INT UNSIGNED DEFAULT NULL,
+  changed_by   INT UNSIGNED NOT NULL,
+  changed_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  notes        TEXT DEFAULT NULL,
+  tenant_id    INT UNSIGNED DEFAULT NULL,
+  INDEX idx_ah_job_id (job_id),
+  INDEX idx_ah_tenant (tenant_id),
+  INDEX idx_ah_changed_at (changed_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- Phase 3: Job Assignment & Status Automation
+-- job_completions table
+-- ============================================================
+CREATE TABLE IF NOT EXISTS job_completions (
+  id           INT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  job_id       INT UNSIGNED NOT NULL UNIQUE,
+  completed_by INT UNSIGNED NOT NULL,
+  lat          DOUBLE DEFAULT NULL,
+  lng          DOUBLE DEFAULT NULL,
+  accuracy_m   FLOAT DEFAULT NULL,
+  gps_status   ENUM('ok','low_accuracy','no_gps') NOT NULL DEFAULT 'no_gps',
+  completed_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  tenant_id    INT UNSIGNED DEFAULT NULL,
+  INDEX idx_jc_job_id (job_id),
+  INDEX idx_jc_tenant (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================================
+-- Phase 3: Job Assignment & Status Automation
+-- Make changed_by nullable on job_status_changes (for cron-initiated transitions)
+-- ============================================================
+ALTER TABLE job_status_changes MODIFY COLUMN changed_by INT(10) UNSIGNED DEFAULT NULL;
