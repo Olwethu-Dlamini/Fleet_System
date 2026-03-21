@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 03-03-PLAN.md
-last_updated: "2026-03-21T14:51:31.118Z"
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-03-21T16:06:15.941Z"
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 13
+  completed_plans: 12
   percent: 100
 ---
 
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Schedulers can efficiently assign, monitor, and adjust jobs in real-time so no job falls through the cracks
-**Current focus:** Phase 03 — job-assignment-status-automation
+**Current focus:** Phase 04 — dashboard-views
 
 ## Milestone: v1.0
 
-**Status:** Executing Phase 03
+**Status:** Executing Phase 04
 **Phases:** 9 total
 **Requirements:** 62 v1 requirements mapped across all phases
 
 ## Current Phase
 
-**Phase:** 3
+**Phase:** 4
 **Status:** Complete (02-01, 02-02, 02-03 all complete)
 **Current Plan:** 1
 **Requirements:** USR-01 to SCHED-04
@@ -102,6 +102,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | DriverLoadCard uses green border + box-shadow on below_average to create glow effect | 03-03 ASGN-02 |
 | 2026-03-21 | Confirm dialog fires FIRST, GPS capture second — user decides before GPS permission prompt | 03-03 STAT-03 |
 | 2026-03-21 | Complete Job button visible to assigned driver/technician AND admin/scheduler per STAT-02 | 03-03 STAT-02 |
+| 2026-03-21 | All dashboard routes require verifyToken — closes previously unauthenticated /summary and /stats | 04-01 DASH |
+| 2026-03-21 | All dashboard queries scoped to req.user.tenant_id — fixes multi-tenant data leak in getDashboardSummary and getQuickStats | 04-01 DASH |
+| 2026-03-21 | getChartData uses HOUR(scheduled_time_start) grouped by hour excluding cancelled for bar chart API | 04-01 DASH-01 |
 
 ## Performance Metrics
 
@@ -119,11 +122,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 03 P01 | 4 | 2 tasks | 4 files |
 | Phase 03 P02 | 5 | 2 tasks | 5 files |
 | Phase 03 P03 | 30 | 2 tasks | 6 files |
+| Phase 04 P01 | 8 | 2 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-03-21T14:51:31.110Z
-**Stopped at:** Completed 03-03-PLAN.md
+**Last session:** 2026-03-21T16:06:15.935Z
+**Stopped at:** Completed 04-01-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*

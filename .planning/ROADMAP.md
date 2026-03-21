@@ -11,7 +11,7 @@
 | 1 | Foundation & Security Hardening | 5/5 | Complete    | 2026-03-21 |
 | 2 | User, Vehicle & Scheduler Enhancements | 3/3 | Complete   | 2026-03-21 |
 | 3 | Job Assignment & Status Automation | 3/3 | Complete   | 2026-03-21 |
-| 4 | Dashboard & Views | DASH-01â€“04 | LOW | Phase 2 (scheduler role), Phase 3 (job counts) |
+| 4 | Dashboard & Views | 1/2 | In Progress|  |
 | 5 | Notifications & Alerts | NOTIF-01â€“07 | MEDIUM | Phase 1 (foundation), Phase 3 (status automation) |
 | 6 | Time Management | TIME-01â€“07 | HIGH | Phase 5 (notifications), Phase 3 (assignment) |
 | 7 | GPS, Maps & Live Tracking | GPS-01â€“08 | HIGH | Phase 1 (security), Phase 5 (notifications) |
@@ -140,11 +140,11 @@ Plans:
 - [ ] Toggle switches between driver and client views on weekday schedule
 - [ ] Badge counts are accurate and update in real-time
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency— Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
-- [ ] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter— Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
+- [x] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependencyï¿½ Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
+- [ ] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filterï¿½ Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
 
 ---
 
@@ -282,8 +282,8 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency— Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
-- [ ] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter— Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
+- [ ] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependencyï¿½ Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
+- [ ] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filterï¿½ Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
 
 ---
 
