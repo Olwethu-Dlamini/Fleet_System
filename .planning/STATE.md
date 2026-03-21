@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 01-02 (next)
+current_plan: 01-04 (next)
 status: executing
-stopped_at: Completed 01-02-PLAN.md
-last_updated: "2026-03-21T10:32:01.233Z"
+stopped_at: Completed 01-03-PLAN.md
+last_updated: "2026-03-21T10:35:00.000Z"
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 25
+  completed_plans: 3
+  percent: 75
 ---
 
 # FleetScheduler Pro — Project State
@@ -32,15 +32,15 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 ## Current Phase
 
 **Phase:** 1 — Foundation & Security Hardening
-**Status:** In progress (01-01, 01-02 complete)
-**Current Plan:** 01-03 (next)
+**Status:** In progress (01-01, 01-02, 01-03 complete)
+**Current Plan:** 01-04 (next)
 **Requirements:** FOUND-01 to FOUND-10
 
 ## Phase Progress
 
 | Phase | Name | Status | Plans |
 |-------|------|--------|-------|
-| 1 | Foundation & Security Hardening | ◑ In progress | 2/4 |
+| 1 | Foundation & Security Hardening | ◑ In progress | 3/4 |
 | 2 | User, Vehicle & Scheduler Enhancements | ○ Not started | 0/0 |
 | 3 | Job Assignment & Status Automation | ○ Not started | 0/0 |
 | 4 | Dashboard & Views | ○ Not started | 0/0 |
@@ -50,7 +50,7 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 | 8 | Testing Suite | ○ Not started | 0/0 |
 | 9 | Documentation & Deployment | ○ Not started | 0/0 |
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 75%
 
 ## Key Documents
 
@@ -76,6 +76,9 @@ Progress: [█████░░░░░] 50%
 | 2026-03-21 | pool.on('connection') hook for GROUP_CONCAT fix | Per-connection SESSION var is the correct mysql2 pattern |
 | 2026-03-21 | Availability check inside FOR UPDATE transaction (not split read-then-lock) | Closes vehicle double-booking race (FOUND-02) |
 | 2026-03-21 | LAST_INSERT_ID(expr) atomic counter replaces SELECT MAX for job numbers | Single atomic DB operation, no race possible (FOUND-03) |
+| 2026-03-21 | helmet() scoped to /api only — Swagger UI uses inline scripts blocked by CSP | FOUND-05 |
+| 2026-03-21 | loginLimiter skipSuccessfulRequests: true — shared NAT/office IPs | FOUND-05 |
+| 2026-03-21 | tenant_id in JWT payload from login — downstream phases need tenant-scoped queries | FOUND-04 |
 
 ## Performance Metrics
 
@@ -83,11 +86,12 @@ Progress: [█████░░░░░] 50%
 |-------|------|----------------|-------|-------|
 | 01 | 01 | 8 | 3/3 | 3 |
 | 01 | 02 | 9 | 2/2 | 2 |
+| 01 | 03 | 3 | 3/3 | 8 |
 
 ## Session
 
-**Last session:** 2026-03-21T10:32:01.230Z
-**Stopped at:** Completed 01-02-PLAN.md
+**Last session:** 2026-03-21T10:35:00.000Z
+**Stopped at:** Completed 01-03-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*

@@ -12,9 +12,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **FOUND-01**: Add `tenant_id` column to all tables for multi-tenant isolation
 - [x] **FOUND-02**: Fix race condition in job assignment — wrap availability check + insert in `SELECT ... FOR UPDATE` transaction
 - [x] **FOUND-03**: Fix job number generation race condition — use atomic sequence table
-- [ ] **FOUND-04**: Remove hardcoded JWT secret fallback — enforce env variable
-- [ ] **FOUND-05**: Add `helmet` and `express-rate-limit` middleware to server
-- [ ] **FOUND-06**: Add input validation middleware (express-validator) on all routes
+- [x] **FOUND-04**: Remove hardcoded JWT secret fallback — enforce env variable
+- [x] **FOUND-05**: Add `helmet` and `express-rate-limit` middleware to server
+- [x] **FOUND-06**: Add input validation middleware (express-validator) on all routes
 - [x] **FOUND-07**: Set `TZ=UTC` in Docker and add `tenant_timezone` field
 - [x] **FOUND-08**: Fix `GROUP_CONCAT` truncation — set `group_concat_max_len=65536` per connection
 - [x] **FOUND-09**: Add database indexes on `scheduled_date`, `current_status`, `tenant_id`
