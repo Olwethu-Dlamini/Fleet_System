@@ -12,8 +12,10 @@ const db       = require('../config/database');
 const bcrypt   = require('bcryptjs');
 const jwt      = require('jsonwebtoken');
 const { USER_ROLE } = require('../config/constants');
+const logger   = require('../config/logger').child({ service: 'auth-controller' });
 
-const JWT_SECRET  = process.env.JWT_SECRET  || 'vehicle_scheduling_secret_2024';
+const JWT_SECRET  = process.env.JWT_SECRET;
+// Note: startup guard in server.js ensures JWT_SECRET is always set at runtime
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '8h';
 
 class AuthController {
@@ -89,10 +91,11 @@ class AuthController {
       // ── Generate JWT ──────────────────────
       const token = jwt.sign(
         {
-          id      : user.id,
-          username: user.username,
-          role    : normalisedRole,
-          email   : user.email,
+          id        : user.id,
+          username  : user.username,
+          role      : normalisedRole,
+          email     : user.email,
+          tenant_id : user.tenant_id,
         },
         JWT_SECRET,
         { expiresIn: JWT_EXPIRES }
@@ -116,7 +119,7 @@ class AuthController {
       });
 
     } catch (error) {
-      console.error('Login error:', error.message);
+      logger.error({ err: error.message }, 'Login error');
       return res.status(500).json({
         success: false,
         message: 'Login failed. Please try again.',
@@ -152,7 +155,7 @@ class AuthController {
       });
 
     } catch (error) {
-      console.error('GetMe error:', error.message);
+      logger.error({ err: error.message }, 'GetMe error');
       return res.status(500).json({ success: false, message: 'Failed to get user info' });
     }
   }
