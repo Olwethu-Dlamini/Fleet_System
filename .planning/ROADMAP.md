@@ -79,7 +79,12 @@ Plans:
 - [ ] Scheduler can do everything admin can EXCEPT add/remove vehicles and users
 - [ ] Scheduler can swap vehicles on jobs
 
-**Estimated plans:** 3
+**Plans:** 3 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — Backend schema migration + all new/extended API routes (contacts, maintenance CRUD, settings, swap-vehicle)
+- [ ] 02-02-PLAN.md — Flutter user screens: contact phone fields, tap-to-call, permission-based UI gating
+- [ ] 02-03-PLAN.md — Flutter vehicle screens: maintenance UI, maintenance badge, admin settings toggle, permission gating
 
 ---
 
@@ -299,3 +304,4 @@ Phase 9 (Docs) ←── Phase 8
 *Last updated: 2026-03-21 after research synthesis*
 *Phase 1 plans created: 2026-03-21*
 *Phase 1 gap closure plan added: 2026-03-21*
+*Phase 2 plans created: 2026-03-21*
