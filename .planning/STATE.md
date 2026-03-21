@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 06-01-PLAN.md
-last_updated: "2026-03-21T18:21:22.725Z"
+stopped_at: Completed 06-02-PLAN.md
+last_updated: "2026-03-21T18:29:15.639Z"
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 20
-  completed_plans: 18
+  completed_plans: 19
   percent: 100
 ---
 
@@ -119,6 +119,8 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | FOR UPDATE one-active-request guard in createRequest — prevents double-booking race on concurrent extension requests | 06-01 TIME |
 | 2026-03-21 | analyzeImpact covers both driver (job_technicians) and vehicle (job_assignments) overlap — full conflict detection | 06-01 TIME |
 | 2026-03-21 | Notifications sent after transaction commit in approveRequest — same pattern as all other services, audit never blocks commit | 06-01 TIME |
+| 2026-03-21 | Add More Time button gated to isAssigned AND in_progress — not role-based, matches TIME-01 spec exactly | 06-02 TIME |
+| 2026-03-21 | TimeExtensionProvider.clearState() public — future scheduler approval screen can reset between jobs | 06-02 TIME |
 
 ## Performance Metrics
 
@@ -143,11 +145,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 05 P02 | 7 | 3 tasks | 8 files |
 | Phase 05 P03 | 8 | 2 tasks | 9 files |
 | Phase 06 P01 | 4 | 2 tasks | 4 files |
+| Phase 06 P02 | 4 | 2 tasks | 6 files |
 
 ## Session
 
-**Last session:** 2026-03-21T18:21:22.720Z
-**Stopped at:** Completed 06-01-PLAN.md
+**Last session:** 2026-03-21T18:29:15.634Z
+**Stopped at:** Completed 06-02-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
