@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 06-02-PLAN.md
-last_updated: "2026-03-21T18:29:15.639Z"
+stopped_at: Completed 06-03-PLAN.md
+last_updated: "2026-03-21T18:31:13.607Z"
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 20
-  completed_plans: 19
+  completed_plans: 20
   percent: 100
 ---
 
@@ -121,6 +121,8 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | Notifications sent after transaction commit in approveRequest — same pattern as all other services, audit never blocks commit | 06-01 TIME |
 | 2026-03-21 | Add More Time button gated to isAssigned AND in_progress — not role-based, matches TIME-01 spec exactly | 06-02 TIME |
 | 2026-03-21 | TimeExtensionProvider.clearState() public — future scheduler approval screen can reset between jobs | 06-02 TIME |
+| 2026-03-21 | GlobalKey<NavigatorState> on FcmService.navigatorKey wired to MaterialApp — enables FCM to push routes without BuildContext (cold-start + background tap) | 06-03 TIME |
+| 2026-03-21 | time_extension_approved/denied navigates popUntil(root) — JobDetailScreen requires a full Job object, navigating to jobs list is safer than partial navigation | 06-03 TIME |
 
 ## Performance Metrics
 
@@ -146,11 +148,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 05 P03 | 8 | 2 tasks | 9 files |
 | Phase 06 P01 | 4 | 2 tasks | 4 files |
 | Phase 06 P02 | 4 | 2 tasks | 6 files |
+| Phase 06 P03 | 4 | 2 tasks | 3 files |
 
 ## Session
 
-**Last session:** 2026-03-21T18:29:15.634Z
-**Stopped at:** Completed 06-02-PLAN.md
+**Last session:** 2026-03-21T18:31:13.603Z
+**Stopped at:** Completed 06-03-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
