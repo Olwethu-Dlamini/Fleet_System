@@ -34,6 +34,8 @@ CREATE TABLE `jobs` (
   `customer_name` varchar(100) NOT NULL,
   `customer_phone` varchar(20) DEFAULT NULL,
   `customer_address` text NOT NULL,
+  `destination_lat` double DEFAULT NULL,
+  `destination_lng` double DEFAULT NULL,
   `description` text DEFAULT NULL,
   `scheduled_date` date NOT NULL,
   `scheduled_time_start` time NOT NULL,
@@ -432,3 +434,40 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+-- ============================================
+-- TIME MANAGEMENT TABLES (Phase 06 - TIME-01 to TIME-07)
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS `time_extension_requests` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `tenant_id` int(10) UNSIGNED NOT NULL,
+  `job_id` int(10) UNSIGNED NOT NULL,
+  `requested_by` int(10) UNSIGNED NOT NULL,
+  `duration_minutes` int(10) UNSIGNED NOT NULL,
+  `reason` text NOT NULL,
+  `status` enum('pending','approved','denied') NOT NULL DEFAULT 'pending',
+  `denial_reason` text DEFAULT NULL,
+  `approved_denied_by` int(10) UNSIGNED DEFAULT NULL,
+  `approved_denied_at` timestamp NULL DEFAULT NULL,
+  `selected_suggestion_id` int(10) UNSIGNED DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ter_job_status` (`job_id`,`status`),
+  KEY `idx_ter_tenant` (`tenant_id`),
+  KEY `idx_ter_requested_by` (`requested_by`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+CREATE TABLE IF NOT EXISTS `reschedule_options` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `request_id` int(10) UNSIGNED NOT NULL,
+  `tenant_id` int(10) UNSIGNED NOT NULL,
+  `type` enum('push','swap','custom') NOT NULL,
+  `label` varchar(100) NOT NULL,
+  `changes_json` text NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ro_request` (`request_id`),
+  KEY `idx_ro_tenant` (`tenant_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
