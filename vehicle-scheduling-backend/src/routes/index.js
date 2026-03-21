@@ -22,6 +22,7 @@ const availabilityRoutes      = require('./availabilityRoutes');  // ← NEW
 const vehicleMaintenanceRoutes = require('./vehicle-maintenance'); // ← Phase 2
 const settingsRoutes           = require('./settings');            // ← Phase 2
 const notificationRoutes       = require('./notifications');        // ← Phase 5
+const timeExtensionRoutes      = require('./timeExtension');         // ← Phase 6
 
 // ==========================================
 // REGISTER ROUTES
@@ -39,6 +40,7 @@ router.use('/availability',        availabilityRoutes);        // /api/availabil
 router.use('/vehicle-maintenance', vehicleMaintenanceRoutes);  // /api/vehicle-maintenance ← Phase 2
 router.use('/settings',            settingsRoutes);             // /api/settings ← Phase 2
 router.use('/notifications',       notificationRoutes);         // /api/notifications ← Phase 5
+router.use('/time-extensions',     timeExtensionRoutes);         // /api/time-extensions ← Phase 6
 
 // ==========================================
 // HEALTH CHECK
