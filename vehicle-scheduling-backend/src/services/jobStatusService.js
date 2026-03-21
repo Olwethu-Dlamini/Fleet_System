@@ -396,6 +396,62 @@ class JobStatusService {
   }
 
   // ==========================================
+  // FUNCTION: completeJob
+  // PURPOSE: STAT-02/03/04 — Complete a job with personnel check and GPS capture
+  // ==========================================
+  /**
+   * Complete a job with personnel authorization check and GPS coordinate capture.
+   *
+   * STAT-02: Only assigned drivers/technicians or admin/scheduler/dispatcher can complete a job.
+   * STAT-03: GPS coordinates are captured at the moment of completion.
+   * STAT-04: Completion record is inserted into job_completions table.
+   *
+   * @param {number} jobId - Job ID
+   * @param {number} userId - User completing the job
+   * @param {string} userRole - User's role ('admin', 'scheduler', 'dispatcher', 'technician')
+   * @param {object} gpsData - { lat, lng, accuracy_m, gps_status }
+   * @returns {object} { job, statusChange, completion }
+   */
+  static async completeJob(jobId, userId, userRole, gpsData = {}) {
+    // STAT-02: Verify the user is assigned to this job or is admin/scheduler/dispatcher
+    const isAdminOrScheduler = ['admin', 'scheduler', 'dispatcher'].includes(userRole);
+
+    if (!isAdminOrScheduler) {
+      // Read-only personnel check — no transaction needed
+      const [techRows] = await db.query(
+        'SELECT 1 FROM job_technicians WHERE job_id = ? AND user_id = ?',
+        [jobId, userId]
+      );
+      const [assignRow] = await db.query(
+        'SELECT 1 FROM job_assignments WHERE job_id = ? AND driver_id = ?',
+        [jobId, userId]
+      );
+      if (techRows.length === 0 && assignRow.length === 0) {
+        throw new Error('FORBIDDEN: Only assigned personnel can complete this job.');
+      }
+    }
+
+    // Use existing updateJobStatus for the status transition (has its own transaction)
+    const result = await this.updateJobStatus(jobId, 'completed', userId, 'Job completed');
+
+    // STAT-03/04: Insert into job_completions with GPS data
+    const { lat = null, lng = null, accuracy_m = null, gps_status = 'no_gps' } = gpsData;
+    await db.query(
+      `INSERT INTO job_completions (job_id, completed_by, lat, lng, accuracy_m, gps_status, completed_at, tenant_id)
+       VALUES (?, ?, ?, ?, ?, ?, NOW(), (SELECT tenant_id FROM jobs WHERE id = ?))`,
+      [jobId, userId, lat, lng, accuracy_m, gps_status, jobId]
+    );
+
+    logger.info({ jobId, userId, gps_status }, 'Job completed with GPS capture');
+
+    return {
+      job: result.job,
+      statusChange: result.statusChange,
+      completion: { job_id: jobId, completed_by: userId, lat, lng, accuracy_m, gps_status }
+    };
+  }
+
+  // ==========================================
   // FUNCTION: canTransitionTo
   // PURPOSE: Check if a status transition is allowed
   // RETURNS: Boolean

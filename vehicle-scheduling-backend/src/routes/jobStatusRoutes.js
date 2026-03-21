@@ -7,12 +7,74 @@
 const express = require('express');
 const router = express.Router();
 const JobStatusController = require('../controllers/jobStatusController');
+const { verifyToken } = require('../middleware/authMiddleware');
+const JobStatusService = require('../services/jobStatusService');
+const logger = require('../config/logger').child({ service: 'jobStatusRoutes' });
 
 /**
  * Job Status Routes
- * 
+ *
  * Base URL: /api/job-status
  */
+
+// ==========================================
+// POST /api/job-status/complete
+// PURPOSE: STAT-02/03/04 — Complete a job with personnel check and GPS capture
+// Only assigned personnel or admin/scheduler can mark a job complete.
+// ==========================================
+/**
+ * Complete a job
+ *
+ * Body:
+ * {
+ *   "job_id": 5,
+ *   "lat": -26.2041,        // optional, null if no GPS
+ *   "lng": 28.0473,         // optional, null if no GPS
+ *   "accuracy_m": 15.0,     // optional
+ *   "gps_status": "ok"      // optional: "ok" | "low_accuracy" | "no_gps" (default: "no_gps")
+ * }
+ *
+ * Success response (200):
+ * {
+ *   "success": true,
+ *   "message": "Job completed successfully",
+ *   "data": { "job": {...}, "statusChange": {...}, "completion": {...} }
+ * }
+ *
+ * Error response (403): Non-assigned, non-admin user
+ */
+// STAT-02/03/04: Complete a job — only assigned personnel or admin/scheduler
+router.post('/complete', verifyToken, async (req, res) => {
+  try {
+    const { job_id, lat, lng, accuracy_m, gps_status } = req.body;
+
+    if (!job_id) {
+      return res.status(400).json({ success: false, message: 'job_id is required' });
+    }
+
+    const validGpsStatuses = ['ok', 'low_accuracy', 'no_gps'];
+    const sanitizedGpsStatus = validGpsStatuses.includes(gps_status) ? gps_status : 'no_gps';
+
+    const result = await JobStatusService.completeJob(
+      job_id,
+      req.user.id,
+      req.user.role,
+      { lat: lat || null, lng: lng || null, accuracy_m: accuracy_m || null, gps_status: sanitizedGpsStatus }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: 'Job completed successfully',
+      data: result
+    });
+  } catch (err) {
+    if (err.message.startsWith('FORBIDDEN')) {
+      return res.status(403).json({ success: false, message: 'Only assigned personnel can complete this job.' });
+    }
+    logger.error({ err, jobId: req.body.job_id }, 'Job completion failed');
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
 
 // ==========================================
 // POST /api/job-status/update
