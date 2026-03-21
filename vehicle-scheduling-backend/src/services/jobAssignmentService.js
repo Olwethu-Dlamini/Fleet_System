@@ -41,33 +41,26 @@ class JobAssignmentService {
    * If only driver_id is provided it is treated as a single technician as a fallback.
    */
   static async assignJobToVehicle(assignmentData) {
-    // ✅ STEP 0: EXTRACT DATA (outside transaction)
+    // STEP 0: EXTRACT DATA (outside transaction)
     const {
       job_id,
       vehicle_id,
       driver_id = null,
-      technician_ids = [],   // ← NEW: array of user IDs to write to job_technicians
+      technician_ids = [],   // array of user IDs to write to job_technicians
       notes = null,
-      assigned_by
+      assigned_by,
+      forceOverride = false
     } = assignmentData;
-    
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🚀 Starting Job Assignment Process');
-    console.log('═══════════════════════════════════════════════════════');
-    
+
     // ============================================
-    // ✅ STEP 1: VALIDATE JOB (READ-ONLY - OUTSIDE TRANSACTION)
+    // STEP 1: VALIDATE JOB (READ-ONLY - OUTSIDE TRANSACTION)
+    // Safe outside transaction: job existence does not affect the assignment race
     // ============================================
-    console.log(`\n📋 STEP 1: Validating job ID ${job_id} (read-only)...`);
-    
     const job = await Job.getJobById(job_id);
     if (!job) {
       throw new Error(`Job with ID ${job_id} not found`);
     }
-    
-    console.log(`   Job Number: ${job.job_number}`);
-    console.log(`   Current Status: ${job.current_status}`);
-    
+
     // Check if job is in a status that allows assignment
     if (!['pending', 'assigned'].includes(job.current_status)) {
       throw new Error(
@@ -75,220 +68,177 @@ class JobAssignmentService {
         `Job must be in "pending" or "assigned" status to be assigned.`
       );
     }
-    
-    console.log('   ✓ Job validation passed');
-    
+
     // ============================================
-    // ✅ STEP 2: VALIDATE VEHICLE (READ-ONLY - OUTSIDE TRANSACTION)
+    // STEP 2: VALIDATE VEHICLE (READ-ONLY - OUTSIDE TRANSACTION)
+    // Safe outside transaction: vehicle existence/active state doesn't race
     // ============================================
-    console.log(`\n🚗 STEP 2: Validating vehicle ID ${vehicle_id} (read-only)...`);
-    
     const vehicle = await Vehicle.getVehicleById(vehicle_id);
     if (!vehicle) {
       throw new Error(`Vehicle with ID ${vehicle_id} not found`);
     }
-    
-    console.log(`   Vehicle Name: ${vehicle.vehicle_name}`);
-    console.log(`   License Plate: ${vehicle.license_plate}`);
-    console.log(`   Active: ${vehicle.is_active ? 'Yes' : 'No'}`);
-    
+
     if (!vehicle.is_active) {
       throw new Error(
         `Vehicle "${vehicle.vehicle_name}" (${vehicle.license_plate}) is currently inactive. ` +
         `Please activate the vehicle before assigning jobs.`
       );
     }
-    
-    console.log('   ✓ Vehicle validation passed');
-    
+
     // ============================================
-    // ✅ STEP 3: CHECK CONFLICTS (READ-ONLY - OUTSIDE TRANSACTION)
+    // STEP 3: TRANSACTION with FOR UPDATE lock + deadlock retry
+    //
+    // The availability check MUST run inside the transaction with FOR UPDATE
+    // so two concurrent requests cannot both pass the check and both write.
+    // Deadlock retry handles InnoDB lock ordering collisions (3 attempts).
     // ============================================
-    console.log(`\n⏰ STEP 3: Checking scheduling conflicts (read-only)...`);
-    console.log(`   Date: ${job.scheduled_date}`);
-    console.log(`   Time: ${job.scheduled_time_start} - ${job.scheduled_time_end}`);
-    
-    const availabilityCheck = await VehicleAvailabilityService.checkVehicleAvailability(
-      vehicle_id,
-      job.scheduled_date,
-      job.scheduled_time_start,
-      job.scheduled_time_end,
-      job_id // Exclude current job from conflict check
-    );
-    
-    if (!availabilityCheck.isAvailable) {
-      const conflictList = availabilityCheck.conflicts.map((conflict, index) => 
-        `   ${index + 1}. ${conflict.job_number} (${conflict.scheduled_time_start} - ${conflict.scheduled_time_end})`
-      ).join('\n');
-      
-      throw new Error(
-        `Time conflict detected for vehicle "${vehicle.vehicle_name}":\n` +
-        conflictList + '\n' +
-        `Suggestion: Choose a different vehicle or reschedule the job.`
-      );
-    }
-
-    // ── STEP 3b: Check driver / technician conflicts ──────────────
-    const effectiveTechIds = technician_ids.length > 0
-      ? technician_ids
-      : (driver_id ? [driver_id] : []);
-
-    if (effectiveTechIds.length > 0) {
-      console.log(`\n👤 STEP 3b: Checking driver conflicts for [${effectiveTechIds.join(', ')}]...`);
-      const driverCheck = await VehicleAvailabilityService.checkDriversAvailability(
-        effectiveTechIds,
-        job.scheduled_date,
-        job.scheduled_time_start,
-        job.scheduled_time_end,
-        job_id
-      );
-
-      if (!driverCheck.allAvailable) {
-        // Group conflicts by driver name for a clear message
-        const byDriver = {};
-        driverCheck.conflicts.forEach(c => {
-          if (!byDriver[c.driverName]) byDriver[c.driverName] = [];
-          byDriver[c.driverName].push(`${c.jobNumber} (${c.timeSlot})`);
-        });
-        const conflictMsg = Object.entries(byDriver)
-          .map(([name, jobs]) => `   • ${name} is already assigned to: ${jobs.join(', ')}`)
-          .join('\n');
-
-        throw new Error(
-          `Driver scheduling conflict detected:\n${conflictMsg}\n` +
-          `Please remove the conflicting driver(s) or choose a different time.`
-        );
-      }
-      console.log('   ✓ No driver conflicts found');
-    }
-
-    console.log('   ✓ No scheduling conflicts found');
-    
-    // ============================================
-    // ✅ STEP 4: MINIMAL TRANSACTION (WRITE-ONLY OPERATIONS ONLY)
-    // ============================================
-    console.log(`\n💾 STEP 4: Executing atomic write operations...`);
-    
-    let connection = null;
+    const MAX_RETRIES = 3;
+    let attempt = 0;
     let assignmentId = null;
-    
-    try {
-      // Acquire connection and start transaction ONLY for writes
-      connection = await db.getConnection();
-      await connection.beginTransaction();
-      
-      // ✅ WRITE 1: Delete existing assignment (handles reassignment safely)
-      await connection.query(
-        'DELETE FROM job_assignments WHERE job_id = ?',
-        [job_id]
-      );
-      console.log('   ✓ Cleared existing assignment for this job');
-      
-      // ✅ WRITE 2: Create new assignment record
-      const [assignmentResult] = await connection.query(
-        `INSERT INTO job_assignments (
-          job_id,
-          vehicle_id,
-          driver_id,
-          notes,
-          assigned_by,
-          assigned_at
-        ) VALUES (?, ?, ?, ?, ?, NOW())`,
-        [job_id, vehicle_id, driver_id, notes, assigned_by]
-      );
-      
-      assignmentId = assignmentResult.insertId;
-      console.log(`   ✓ Created assignment record (ID: ${assignmentId})`);
 
-      // ✅ WRITE 3: Replace technician/driver list in job_technicians.
-      // technician_ids is the preferred multi-driver path.
-      // Fallback: if technician_ids is empty but driver_id was provided,
-      // treat driver_id as a single technician so they can see the job
-      // via GET /api/jobs/my-jobs.
-      const effectiveTechIds = technician_ids.length > 0
-        ? technician_ids
-        : (driver_id ? [driver_id] : []);
+    while (attempt < MAX_RETRIES) {
+      const connection = await db.getConnection();
+      try {
+        await connection.beginTransaction();
 
-      await connection.query(
-        'DELETE FROM job_technicians WHERE job_id = ?',
-        [job_id]
-      );
-
-      if (effectiveTechIds.length > 0) {
-        const techRows = effectiveTechIds.map(uid => [job_id, uid, assigned_by]);
-        await connection.query(
-          'INSERT INTO job_technicians (job_id, user_id, assigned_by) VALUES ?',
-          [techRows]
+        // LOCK: Acquire row locks on all vehicle assignments for this date.
+        // FOR UPDATE prevents any concurrent transaction from reading/modifying
+        // the same rows until this transaction commits or rolls back.
+        const [existingAssignments] = await connection.query(
+          `SELECT ja.id, j.scheduled_time_start, j.scheduled_time_end, j.job_number
+           FROM job_assignments ja
+           JOIN jobs j ON ja.job_id = j.id
+           WHERE ja.vehicle_id = ?
+             AND j.scheduled_date = ?
+             AND j.current_status NOT IN ('completed', 'cancelled')
+             AND j.id != ?
+           FOR UPDATE`,
+          [vehicle_id, job.scheduled_date, job_id]
         );
-        console.log(`   ✓ Assigned ${effectiveTechIds.length} driver(s)/technician(s): [${effectiveTechIds.join(', ')}]`);
-      }
-      
-      // ✅ WRITE 4: Update job status IN SAME TRANSACTION (SIMPLE UPDATE - NO HISTORY TABLE)
-      await connection.query(
-        'UPDATE jobs SET current_status = ?, updated_at = NOW() WHERE id = ?',
-        ['assigned', job_id]
-      );
-      
-      console.log('   ✓ Updated job status: pending → assigned');
-      
-      // ✅ COMMIT - Release locks immediately after writes complete
-      await connection.commit();
-      console.log('   ✓ Transaction committed (locks released)');
-      
-    } catch (error) {
-      // Rollback on error if transaction was started
-      if (connection) {
-        try {
-          await connection.rollback();
-          console.warn('   ⚠️ Transaction rolled back due to error');
-        } catch (rollbackErr) {
-          console.error('   ❌ Error during rollback:', rollbackErr.message);
+
+        // AVAILABILITY CHECK: detect time overlap against locked rows
+        if (!forceOverride && existingAssignments.length > 0) {
+          const requestStart = job.scheduled_time_start;
+          const requestEnd   = job.scheduled_time_end;
+          const conflicts = existingAssignments.filter(a =>
+            requestStart < a.scheduled_time_end && requestEnd > a.scheduled_time_start
+          );
+
+          if (conflicts.length > 0) {
+            await connection.rollback();
+            const conflictList = conflicts
+              .map((c, i) => `   ${i + 1}. ${c.job_number} (${c.scheduled_time_start} - ${c.scheduled_time_end})`)
+              .join('\n');
+            throw Object.assign(
+              new Error(
+                `Time conflict detected for vehicle "${vehicle.vehicle_name}":\n` +
+                conflictList + '\n' +
+                `Suggestion: Choose a different vehicle or reschedule the job.`
+              ),
+              { isConflict: true }
+            );
+          }
         }
-      }
-      
-      // Special handling for lock timeouts
-      if (
-        error.message.includes('Lock wait timeout exceeded') || 
-        error.message.includes('try restarting transaction') ||
-        error.code === 'ER_LOCK_WAIT_TIMEOUT'
-      ) {
-        throw new Error(
-          'Database lock timeout during assignment. ' +
-          'This usually means another process is modifying the same job/vehicle simultaneously. ' +
-          'Please wait 2 seconds and retry the assignment.'
+
+        // WRITE 1: Delete existing assignment (handles reassignment safely)
+        await connection.query(
+          'DELETE FROM job_assignments WHERE job_id = ?',
+          [job_id]
         );
-      }
-      
-      // Re-throw all other errors
-      throw error;
-      
-    } finally {
-      // ALWAYS release connection regardless of success/failure
-      if (connection) {
+
+        // WRITE 2: Create new assignment record
+        const [assignmentResult] = await connection.query(
+          `INSERT INTO job_assignments (
+            job_id,
+            vehicle_id,
+            driver_id,
+            notes,
+            assigned_by,
+            assigned_at
+          ) VALUES (?, ?, ?, ?, ?, NOW())`,
+          [job_id, vehicle_id, driver_id, notes, assigned_by]
+        );
+        assignmentId = assignmentResult.insertId;
+
+        // WRITE 3: Replace technician/driver list in job_technicians.
+        // technician_ids is the preferred multi-driver path.
+        // Fallback: if technician_ids is empty but driver_id was provided,
+        // treat driver_id as a single technician so they can see the job
+        // via GET /api/jobs/my-jobs.
+        const effectiveTechIds = technician_ids.length > 0
+          ? technician_ids
+          : (driver_id ? [driver_id] : []);
+
+        await connection.query(
+          'DELETE FROM job_technicians WHERE job_id = ?',
+          [job_id]
+        );
+
+        if (effectiveTechIds.length > 0) {
+          const techRows = effectiveTechIds.map(uid => [job_id, uid, assigned_by]);
+          await connection.query(
+            'INSERT INTO job_technicians (job_id, user_id, assigned_by) VALUES ?',
+            [techRows]
+          );
+        }
+
+        // WRITE 4: Update job status in the same transaction
+        await connection.query(
+          'UPDATE jobs SET current_status = ?, updated_at = NOW() WHERE id = ?',
+          ['assigned', job_id]
+        );
+
+        await connection.commit();
+        break; // success — exit retry loop
+
+      } catch (err) {
+        await connection.rollback().catch(() => {});
+
+        // Conflict errors (isConflict flag) are not retryable — re-throw immediately
+        if (err.isConflict) {
+          connection.release();
+          throw err;
+        }
+
+        // Deadlock: retry with exponential back-off
+        if (err.code === 'ER_LOCK_DEADLOCK' && attempt < MAX_RETRIES - 1) {
+          attempt++;
+          connection.release();
+          await new Promise(r => setTimeout(r, 50 * attempt));
+          continue;
+        }
+
+        // Lock wait timeout — surface a user-friendly message
+        if (
+          err.message.includes('Lock wait timeout exceeded') ||
+          err.message.includes('try restarting transaction') ||
+          err.code === 'ER_LOCK_WAIT_TIMEOUT'
+        ) {
+          connection.release();
+          throw new Error(
+            'Database lock timeout during assignment. ' +
+            'Another process may be modifying the same job/vehicle simultaneously. ' +
+            'Please wait a moment and retry the assignment.'
+          );
+        }
+
         connection.release();
-        console.log('   ✓ Database connection released');
+        throw err;
+      } finally {
+        // Guard: release only if not already released above
+        try { connection.release(); } catch (_) {}
       }
     }
-    
+
     // ============================================
-    // ✅ STEP 5: FETCH RESULT (READ-ONLY - OUTSIDE TRANSACTION)
+    // STEP 4: FETCH RESULT (READ-ONLY - OUTSIDE TRANSACTION)
     // ============================================
-    console.log(`\n📊 STEP 5: Fetching complete assignment details...`);
     const completeAssignment = await this.getAssignmentDetails(assignmentId);
-    
-    console.log('\n═══════════════════════════════════════════════════════');
-    console.log('✅ Job Assignment Completed Successfully!');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(`   Job: ${completeAssignment.job_number}`);
-    console.log(`   Vehicle: ${completeAssignment.vehicle_name} (${completeAssignment.license_plate})`);
-    console.log(`   Date: ${completeAssignment.scheduled_date}`);
-    console.log(`   Time: ${completeAssignment.scheduled_time_start} - ${completeAssignment.scheduled_time_end}`);
-    console.log('═══════════════════════════════════════════════════════\n');
-    
+
     return {
       success: true,
       message: 'Job assigned successfully',
-       completeAssignment
+      completeAssignment
     };
   }
 
@@ -323,7 +273,6 @@ class JobAssignmentService {
     if (technicianIds.length > 0) {
       if (forceOverride) {
         // Admin override: clear conflicting assignments first, then proceed
-        console.log(`\n👤 Admin override: clearing conflicts for [${technicianIds.join(', ')}] before assigning to job ${jobId}...`);
         await Job.removeDriversFromConflictingJobs(
           technicianIds,
           job.scheduled_date,
@@ -331,10 +280,8 @@ class JobAssignmentService {
           job.scheduled_time_end,
           jobId
         );
-        console.log('   ✓ Conflicting assignments cleared');
       } else {
         // Normal path: conflict check is the authoritative guard
-        console.log(`\n👤 Checking driver conflicts for job ${jobId}...`);
         const driverCheck = await VehicleAvailabilityService.checkDriversAvailability(
           technicianIds,
           job.scheduled_date,
@@ -357,13 +304,11 @@ class JobAssignmentService {
             `Remove the conflicting driver(s) or choose a different time.`
           );
         }
-        console.log('   ✓ No driver conflicts found');
       }
     }
 
     // Atomic replace of technician list (same for both paths)
     await Job.assignTechnicians(jobId, technicianIds, assignedBy, forceOverride);
-    console.log(`   ✓ Technician list updated for job ${jobId}: [${technicianIds.join(', ')}]`);
 
     return await JobAssignmentService.getJobWithTechnicians(jobId);
   }
@@ -373,23 +318,15 @@ class JobAssignmentService {
   // PURPOSE: Remove vehicle assignment from a job
   // ==========================================
   static async unassignJob(jobId, changedBy) {
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🔄 Starting Job Unassignment Process');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(`   Job ID: ${jobId}\n`);
-    
-    // ✅ VALIDATIONS OUTSIDE TRANSACTION (READ-ONLY)
+    // VALIDATIONS OUTSIDE TRANSACTION (READ-ONLY)
     const job = await Job.getJobById(jobId);
     if (!job) {
       throw new Error(`Job with ID ${jobId} not found`);
     }
-    
-    console.log(`   Job Number: ${job.job_number}`);
-    console.log(`   Current Status: ${job.current_status}`);
-    
+
     // Check if job has an assignment
     const [assignments] = await db.query(
-      `SELECT 
+      `SELECT
         ja.id,
         v.vehicle_name,
         v.license_plate,
@@ -400,20 +337,16 @@ class JobAssignmentService {
       WHERE ja.job_id = ?`,
       [jobId]
     );
-    
+
     if (assignments.length === 0) {
       throw new Error(
         `Job ${job.job_number} is not currently assigned to any vehicle. ` +
         `Cannot unassign a job that has no assignment.`
       );
     }
-    
+
     const assignment = assignments[0];
-    console.log(`   Assigned to: ${assignment.vehicle_name} (${assignment.license_plate})`);
-    if (assignment.driver_name) {
-      console.log(`   Driver: ${assignment.driver_name}`);
-    }
-    
+
     // Check if job can be unassigned based on status
     if (job.current_status === 'in_progress') {
       throw new Error(
@@ -421,66 +354,53 @@ class JobAssignmentService {
         `Please complete or cancel the job first.`
       );
     }
-    
+
     if (job.current_status === 'completed') {
       throw new Error(
         `Cannot unassign job ${job.job_number} because it is already completed. ` +
         `Completed jobs cannot be modified.`
       );
     }
-    
-    // ✅ MINIMAL TRANSACTION FOR WRITES ONLY
+
+    // MINIMAL TRANSACTION FOR WRITES ONLY
     let connection = null;
-    
+
     try {
       connection = await db.getConnection();
       await connection.beginTransaction();
-      
+
       // Delete the vehicle assignment
-      console.log('\n   Removing vehicle assignment from database...');
       await connection.query(
         'DELETE FROM job_assignments WHERE job_id = ?',
         [jobId]
       );
-      console.log('   ✓ Vehicle assignment removed');
 
       // Also clear the technician/driver list so they no longer see it in my-jobs
       await connection.query(
         'DELETE FROM job_technicians WHERE job_id = ?',
         [jobId]
       );
-      console.log('   ✓ Technician/driver assignments removed');
-      
-      // Update job status IN SAME TRANSACTION (simple update - no history table)
+
+      // Update job status in same transaction
       await connection.query(
         'UPDATE jobs SET current_status = ?, updated_at = NOW() WHERE id = ?',
         ['pending', jobId]
       );
-      
-      console.log('   ✓ Job status updated to pending');
-      
+
       await connection.commit();
-      
+
     } catch (error) {
       if (connection) {
         await connection.rollback();
-        console.warn('   ⚠️ Transaction rolled back');
       }
       throw error;
-      
+
     } finally {
       if (connection) {
         connection.release();
-        console.log('   ✓ Database connection released');
       }
     }
-    
-    console.log('\n═══════════════════════════════════════════════════════');
-    console.log('✅ Job Unassignment Completed Successfully!');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(`   Job ${job.job_number} is now available for reassignment`);
-    console.log('═══════════════════════════════════════════════════════\n');
-    
+
     return {
       success: true,
       message: `Job ${job.job_number} unassigned successfully. Status changed to pending.`,
@@ -499,21 +419,13 @@ class JobAssignmentService {
   // ==========================================
   static async reassignJob(reassignmentData) {
     const { job_id, new_vehicle_id, driver_id = null, technician_ids = [], notes = null, assigned_by } = reassignmentData;
-    
-    console.log('═══════════════════════════════════════════════════════');
-    console.log('🔄 Starting Job Reassignment Process');
-    console.log('═══════════════════════════════════════════════════════');
-    
-    // Get current job details for logging
+
+    // Get current job details
     const job = await Job.getJobById(job_id);
     if (!job) {
       throw new Error(`Job with ID ${job_id} not found`);
     }
-    
-    console.log(`   Job: ${job.job_number}`);
-    console.log(`   Current Vehicle: ${job.vehicle_name || 'None'}`);
-    console.log(`   Status: ${job.current_status}\n`);
-    
+
     // Only allow reassignment if job is currently assigned or pending
     if (!['pending', 'assigned'].includes(job.current_status)) {
       throw new Error(
@@ -521,10 +433,9 @@ class JobAssignmentService {
         `Only jobs in "pending" or "assigned" status can be reassigned directly.`
       );
     }
-    
-    // Directly assign to new vehicle
-    console.log('   Assigning to new vehicle...');
-    const newAssignment = await this.assignJobToVehicle({
+
+    // Directly assign to new vehicle (uses the FOR UPDATE transactional path)
+    return await this.assignJobToVehicle({
       job_id,
       vehicle_id: new_vehicle_id,
       driver_id,
@@ -532,16 +443,6 @@ class JobAssignmentService {
       notes: notes || `Reassigned from ${job.vehicle_name || 'previous vehicle'}`,
       assigned_by
     });
-    
-    console.log('\n═══════════════════════════════════════════════════════');
-    console.log('✅ Job Reassignment Completed Successfully!');
-    console.log('═══════════════════════════════════════════════════════');
-    console.log(`   Job: ${job.job_number}`);
-    console.log(`   Old Vehicle: ${job.vehicle_name || 'None'}`);
-    console.log(`   New Vehicle: ${newAssignment.data?.vehicle_name || 'N/A'}`);
-    console.log('═══════════════════════════════════════════════════════\n');
-    
-    return newAssignment;
   }
   
   // ==========================================
