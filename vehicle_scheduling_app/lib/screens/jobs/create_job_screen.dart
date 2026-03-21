@@ -33,6 +33,9 @@ import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/models/vehicle.dart';
 import 'package:vehicle_scheduling_app/services/user_service.dart';
+import 'package:vehicle_scheduling_app/widgets/common/location_picker_popup.dart';
+import 'package:vehicle_scheduling_app/widgets/job/driver_load_chip.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class _SummaryRow {
   final IconData icon;
@@ -81,6 +84,9 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   final _descriptionController = TextEditingController();
   final _durationController = TextEditingController(text: '60');
 
+  double? _lat; // ← NEW
+  double? _lng; // ← NEW
+
   String _jobType = 'installation';
   String _priority = 'normal';
   int? _selectedVehicleId;
@@ -98,6 +104,16 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   Set<int> _busyDriverIds = {};
   bool _driversLoading = false;
   String? _driversError;
+
+  // Driver load balancing state (Phase 03)
+  String _loadRange = 'weekly';
+  List<Map<String, dynamic>> _driverLoadData = [];
+  bool _loadingDriverLoad = false;
+
+  // Primary driver selection (single) and technician multi-select
+  int? _selectedDriverId;
+  final Set<int> _selectedTechnicianIds = {};
+  String _techSearchQuery = '';
 
   @override
   void initState() {
@@ -125,8 +141,21 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       if (mounted) {
         context.read<VehicleProvider>().loadVehicles();
         _loadDrivers();
+        _fetchDriverLoad();
       }
     });
+  }
+
+  Future<void> _fetchDriverLoad() async {
+    setState(() => _loadingDriverLoad = true);
+    try {
+      final provider = Provider.of<JobProvider>(context, listen: false);
+      await provider.fetchDriverLoad(range: _loadRange);
+      if (mounted) {
+        setState(() => _driverLoadData = provider.driverLoadStats);
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loadingDriverLoad = false);
   }
 
   Future<void> _loadDrivers() async {
@@ -302,6 +331,28 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     }
   }
 
+  Future<void> _pickLocation() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LocationPickerPopup(
+          initialPosition: _lat != null && _lng != null 
+              ? LatLng(_lat!, _lng!) 
+              : null,
+          initialAddress: _customerAddressController.text,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _customerAddressController.text = result.address;
+        _lat = result.position.latitude;
+        _lng = result.position.longitude;
+      });
+    }
+  }
+
   // ══════════════════════════════════════════════════════════
   // SUBMIT
   //
@@ -346,7 +397,10 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       return;
     }
 
-    final techIds = _selectedDriverIds.toList();
+    // Combine primary driver + technicians. Primary driver is sent via
+    // assignJob() driverId. Technicians (excluding selected primary) go
+    // through assignTechnicians().
+    final techIds = _selectedTechnicianIds.toList();
 
     // ── STEP 1: Create the job ─────────────────────────────────────
     // createJob() now returns Job? — null means it failed.
@@ -356,6 +410,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
           ? null
           : _customerPhoneController.text.trim(),
       customerAddress: _customerAddressController.text.trim(),
+      destinationLat: _lat, // ← NEW
+      destinationLng: _lng, // ← NEW
       jobType: _jobType,
       description: _descriptionController.text.trim().isEmpty
           ? null
@@ -387,6 +443,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       final assigned = await jobProvider.assignJob(
         jobId: newJob.id, // ← Safe: we have the real ID from the DB
         vehicleId: _selectedVehicleId!,
+        driverId: _selectedDriverId,
         assignedBy: auth.user?.id ?? AppConfig.defaultUserId,
       );
 
@@ -795,6 +852,11 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                 validator: (v) => v == null || v.trim().isEmpty
                     ? 'Address is required'
                     : null,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.map_outlined, color: AppTheme.primaryColor),
+                  onPressed: _pickLocation,
+                  tooltip: 'Select on Map',
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -938,8 +1000,8 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
 
               Row(
                 children: [
-                  Expanded(child: _sectionTitle('Assign Drivers (Optional)')),
-                  if (_driversLoading)
+                  Expanded(child: _sectionTitle('Assign Personnel (Optional)')),
+                  if (_loadingDriverLoad || _driversLoading)
                     const SizedBox(
                       width: 16,
                       height: 16,
@@ -949,7 +1011,10 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
                     IconButton(
                       icon: const Icon(Icons.refresh, size: 18),
                       tooltip: 'Reload drivers',
-                      onPressed: _loadDrivers,
+                      onPressed: () {
+                        _loadDrivers();
+                        _fetchDriverLoad();
+                      },
                       color: AppTheme.textSecondary,
                     ),
                 ],
@@ -991,9 +1056,29 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
   }
 
   Widget _buildDriverSelector() {
-    if (_driversLoading) {
-      return const Center(child: CircularProgressIndicator());
+    // ── Range label helper ──────────────────────────────────────
+    String rangeLabel() {
+      switch (_loadRange) {
+        case 'monthly':
+          return 'this month';
+        case 'yearly':
+          return 'this year';
+        default:
+          return 'this week';
+      }
     }
+
+    // ── Technician search results ───────────────────────────────
+    // Available technicians: all drivers minus the selected primary driver
+    final techCandidates = _availableDrivers
+        .where(
+          (d) =>
+              d.id != _selectedDriverId &&
+              d.fullName.toLowerCase().contains(
+                _techSearchQuery.toLowerCase(),
+              ),
+        )
+        .toList();
 
     if (_driversError != null) {
       return Container(
@@ -1026,176 +1111,192 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       );
     }
 
-    if (_availableDrivers.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppTheme.textHint.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.dividerColor),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── SECTION: Primary Driver ────────────────────────────────
+        const Text(
+          'Primary Driver',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
         ),
-        child: const Row(
-          children: [
-            Icon(Icons.person_off_outlined, color: AppTheme.textHint, size: 18),
-            SizedBox(width: 10),
-            Text(
-              'No drivers available.',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
+        const SizedBox(height: 8),
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.dividerColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_selectedDriverIds.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.check_circle_outline,
-                    size: 15,
-                    color: AppTheme.successColor,
-                  ),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${_selectedDriverIds.length} driver(s) selected',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.successColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  GestureDetector(
-                    onTap: () => setState(() => _selectedDriverIds.clear()),
-                    child: const Text(
-                      'Clear all',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.primaryColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            const Padding(
-              padding: EdgeInsets.only(bottom: 10),
-              child: Text(
-                'Tap a driver to assign them to this job',
-                style: TextStyle(fontSize: 12, color: AppTheme.textHint),
-              ),
+        // Time range toggle (weekly / monthly / yearly)
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'weekly', label: Text('Weekly')),
+            ButtonSegment(value: 'monthly', label: Text('Monthly')),
+            ButtonSegment(value: 'yearly', label: Text('Yearly')),
+          ],
+          selected: {_loadRange},
+          onSelectionChanged: (newSet) {
+            if (newSet.isNotEmpty) {
+              setState(() {
+                _loadRange = newSet.first;
+                _selectedDriverId = null; // reset selection on range change
+              });
+              _fetchDriverLoad();
+            }
+          },
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            textStyle: WidgetStateProperty.all(
+              const TextStyle(fontSize: 12),
             ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        if (_loadingDriverLoad)
+          const Center(child: CircularProgressIndicator())
+        else if (_driverLoadData.isEmpty)
+          const Text(
+            'No driver load data available.',
+            style: TextStyle(color: AppTheme.textHint, fontSize: 13),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _driverLoadData.length,
+            itemBuilder: (context, index) {
+              final driver = _driverLoadData[index];
+              return DriverLoadCard(
+                driver: driver,
+                isSelected: _selectedDriverId == (driver['id'] as int?),
+                onTap: () {
+                  setState(() {
+                    final tappedId = driver['id'] as int?;
+                    _selectedDriverId =
+                        _selectedDriverId == tappedId ? null : tappedId;
+                    // Remove from technicians if selected as primary
+                    if (_selectedDriverId != null) {
+                      _selectedTechnicianIds.remove(_selectedDriverId);
+                    }
+                  });
+                },
+                rangeLabel: rangeLabel(),
+              );
+            },
+          ),
+
+        const SizedBox(height: 20),
+
+        // ── SECTION: Technicians ───────────────────────────────────
+        const Text(
+          'Technicians',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.normal,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        // Selected technician chips with X to remove
+        if (_selectedTechnicianIds.isNotEmpty) ...[
           Wrap(
             spacing: 8,
-            runSpacing: 8,
-            children: _availableDrivers.map((driver) {
-              final selected = _selectedDriverIds.contains(driver.id);
-              final isBusy = _busyDriverIds.contains(driver.id);
-              return Opacity(
-                opacity: isBusy ? 0.45 : 1.0,
-                child: Tooltip(
-                  message: isBusy
-                      ? '${driver.fullName} already has a job at this time'
-                      : '',
-                  child: FilterChip(
-                    label: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        CircleAvatar(
-                          radius: 10,
-                          backgroundColor: isBusy
-                              ? AppTheme.textHint.withOpacity(0.3)
-                              : selected
-                              ? AppTheme.primaryColor
-                              : AppTheme.textHint.withOpacity(0.2),
-                          child: Text(
-                            driver.fullName.isNotEmpty
-                                ? driver.fullName[0].toUpperCase()
-                                : '?',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: selected && !isBusy
-                                  ? Colors.white
-                                  : AppTheme.textSecondary,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              driver.fullName,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: selected && !isBusy
-                                    ? FontWeight.w600
-                                    : FontWeight.normal,
-                                color: isBusy
-                                    ? AppTheme.textHint
-                                    : selected
-                                    ? AppTheme.primaryColor
-                                    : AppTheme.textPrimary,
-                              ),
-                            ),
-                            if (isBusy)
-                              const Text(
-                                'Already booked',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  color: AppTheme.errorColor,
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
-                    ),
-                    selected: selected && !isBusy,
-                    showCheckmark: false,
-                    onSelected: isBusy
-                        ? null
-                        : (val) => setState(() {
-                            if (val) {
-                              _selectedDriverIds.add(driver.id);
-                            } else {
-                              _selectedDriverIds.remove(driver.id);
-                            }
-                          }),
-                    selectedColor: AppTheme.primaryColor.withOpacity(0.15),
-                    backgroundColor: isBusy
-                        ? AppTheme.textHint.withOpacity(0.05)
-                        : AppTheme.backgroundColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: BorderSide(
-                        color: isBusy
-                            ? AppTheme.dividerColor
-                            : selected
-                            ? AppTheme.primaryColor
-                            : AppTheme.dividerColor,
-                      ),
-                    ),
-                  ),
+            runSpacing: 4,
+            children: _selectedTechnicianIds.map((id) {
+              final driver = _availableDrivers
+                  .where((d) => d.id == id)
+                  .firstOrNull;
+              final name = driver?.fullName ?? 'Driver $id';
+              return InputChip(
+                label: Text(
+                  name,
+                  style: const TextStyle(fontSize: 13),
                 ),
+                onDeleted: () =>
+                    setState(() => _selectedTechnicianIds.remove(id)),
+                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                deleteIconColor: AppTheme.primaryColor,
               );
             }).toList(),
           ),
+          const SizedBox(height: 8),
         ],
-      ),
+
+        // Technician search field
+        TextFormField(
+          decoration: InputDecoration(
+            hintText: 'Search technicians...',
+            prefixIcon: const Icon(Icons.search, size: 18),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.dividerColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.dividerColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryColor, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
+          onChanged: (val) => setState(() => _techSearchQuery = val),
+        ),
+
+        // Technician search results
+        if (_techSearchQuery.isNotEmpty && techCandidates.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.dividerColor),
+            ),
+            child: Column(
+              children: techCandidates
+                  .where(
+                    (d) => !_selectedTechnicianIds.contains(d.id),
+                  )
+                  .map(
+                    (driver) => ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 14,
+                        backgroundColor:
+                            AppTheme.primaryColor.withOpacity(0.15),
+                        child: Text(
+                          driver.fullName.isNotEmpty
+                              ? driver.fullName[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        driver.fullName,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _selectedTechnicianIds.add(driver.id);
+                          _techSearchQuery = '';
+                        });
+                      },
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1266,6 +1367,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
     void Function(String)? onChanged,
+    Widget? suffixIcon, // ← NEW
   }) {
     return TextFormField(
       controller: controller,
@@ -1276,6 +1378,7 @@ class _CreateJobScreenState extends State<CreateJobScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
+        suffixIcon: suffixIcon, // ← NEW
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(

@@ -30,7 +30,9 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vehicle_scheduling_app/config/app_config.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/models/job.dart';
@@ -61,6 +63,7 @@ class JobDetailScreen extends StatefulWidget {
 
 class _JobDetailScreenState extends State<JobDetailScreen> {
   late Job _job;
+  bool _isCompleting = false;
 
   @override
   void initState() {
@@ -964,6 +967,121 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
+  Future<void> _openMap() async {
+    if (_job.destinationLat == null || _job.destinationLng == null) return;
+    
+    final url = 'https://www.google.com/maps/search/?api=1&query=${_job.destinationLat},${_job.destinationLng}';
+    final uri = Uri.parse(url);
+    
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      _showSnack('Could not launch Google Maps', isError: true);
+    }
+  }
+
+  // ==========================================
+  // COMPLETE JOB WITH GPS  (Phase 03 — STAT-02, STAT-03, STAT-04)
+  // ==========================================
+  Future<void> _completeJobWithGps() async {
+    // Step 1: Confirm dialog — must precede GPS capture (per context decision)
+    final confirmed = await showDialog<bool>(
+      context: context,
+      useRootNavigator: false,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Complete Job'),
+        content: const Text('Are you sure? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    // Step 2: Capture GPS with fallback
+    setState(() => _isCompleting = true);
+
+    Map<String, dynamic> gpsData;
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (permission == LocationPermission.deniedForever ||
+          permission == LocationPermission.denied) {
+        gpsData = {
+          'lat': null,
+          'lng': null,
+          'accuracy_m': null,
+          'gps_status': 'no_gps',
+        };
+      } else {
+        final position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
+        if (position.accuracy <= 50.0) {
+          gpsData = {
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'accuracy_m': position.accuracy,
+            'gps_status': 'ok',
+          };
+        } else {
+          gpsData = {
+            'lat': null,
+            'lng': null,
+            'accuracy_m': null,
+            'gps_status': 'low_accuracy',
+          };
+        }
+      }
+    } catch (_) {
+      gpsData = {
+        'lat': null,
+        'lng': null,
+        'accuracy_m': null,
+        'gps_status': 'no_gps',
+      };
+    }
+
+    if (!mounted) return;
+
+    // Step 3: Call the completion API via provider
+    final provider = context.read<JobProvider>();
+    final success = await provider.completeJobWithGps(
+      jobId: _job.id,
+      lat: gpsData['lat'] as double?,
+      lng: gpsData['lng'] as double?,
+      accuracyM: gpsData['accuracy_m'] as double?,
+      gpsStatus: gpsData['gps_status'] as String,
+    );
+
+    if (!mounted) return;
+    setState(() => _isCompleting = false);
+
+    if (success) {
+      _showSnack('Job completed successfully');
+      Navigator.pop(context);
+    } else {
+      _showSnack(
+        provider.error ?? 'Failed to complete job',
+        isError: true,
+      );
+    }
+  }
+
   // ==========================================
   // BUILD
   // ==========================================
@@ -1089,7 +1207,24 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                 _infoRow('Name', _job.customerName),
                 if (_job.customerPhone != null)
                   _infoRow('Phone', _job.customerPhone!),
-                _infoRow('Address', _job.customerAddress),
+                _infoRow(
+                  'Address',
+                  _job.customerAddress,
+                  trailing: (_job.destinationLat != null &&
+                          _job.destinationLng != null)
+                      ? IconButton(
+                          icon: const Icon(
+                            Icons.directions_outlined,
+                            color: AppTheme.primaryColor,
+                            size: 20,
+                          ),
+                          onPressed: _openMap,
+                          tooltip: 'Navigate',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        )
+                      : null,
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -1365,6 +1500,65 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   icon: Icons.lock_outline,
                 ),
               ],
+
+              // ── COMPLETE JOB BUTTON (Phase 03 — STAT-02/03/04) ────
+              // Visible ONLY to the assigned driver/technician when the job
+              // is in_progress. Admins/schedulers use the standard status
+              // buttons above. This button enforces STAT-02 gating.
+              Builder(
+                builder: (context) {
+                  final currentUserId = auth.user?.id;
+                  final isAssigned = currentUserId != null &&
+                      (_job.driverId == currentUserId ||
+                          _job.technicians.any((t) => t.id == currentUserId));
+                  final isEligible =
+                      (auth.isTechnician && isAssigned) ||
+                      auth.isAdmin ||
+                      auth.hasPermission('jobs:updateStatus');
+                  final showCompleteButton =
+                      isEligible && _job.currentStatus == 'in_progress';
+
+                  if (!showCompleteButton) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 52,
+                        child: ElevatedButton.icon(
+                          onPressed: _isCompleting ? null : _completeJobWithGps,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.successColor,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          icon: _isCompleting
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.check_circle_outline),
+                          label: Text(
+                            _isCompleting ? 'Completing...' : 'Complete Job',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
             ],
 
             const SizedBox(height: 32),
@@ -1458,7 +1652,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     );
   }
 
-  Widget _infoRow(String label, String value, {Color? valueColor}) {
+  Widget _infoRow(String label, String value, {Color? valueColor, Widget? trailing}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
@@ -1484,6 +1678,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               ),
             ),
           ),
+          if (trailing != null) trailing,
         ],
       ),
     );

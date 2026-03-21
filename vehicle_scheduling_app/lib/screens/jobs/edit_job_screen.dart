@@ -12,6 +12,21 @@ import 'package:vehicle_scheduling_app/models/job.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/services/job_service.dart';
+import 'package:vehicle_scheduling_app/services/user_service.dart';
+import 'package:vehicle_scheduling_app/widgets/common/location_picker_popup.dart';
+import 'package:vehicle_scheduling_app/widgets/job/driver_load_chip.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+
+class _DriverOption {
+  final int id;
+  final String fullName;
+  const _DriverOption({required this.id, required this.fullName});
+
+  factory _DriverOption.fromJson(Map<String, dynamic> j) => _DriverOption(
+    id: j['id'] as int,
+    fullName: (j['full_name'] ?? j['fullName'] ?? '').toString(),
+  );
+}
 
 class EditJobScreen extends StatefulWidget {
   final Job job;
@@ -36,9 +51,21 @@ class _EditJobScreenState extends State<EditJobScreen> {
   late TimeOfDay _scheduledTimeStart;
   late TimeOfDay _scheduledTimeEnd;
 
+  double? _lat; // ← NEW
+  double? _lng; // ← NEW
+
   String? _dateError;
   String? _timeError;
   bool _saving = false;
+
+  // Driver load balancing state (Phase 03)
+  String _loadRange = 'weekly';
+  List<Map<String, dynamic>> _driverLoadData = [];
+  bool _loadingDriverLoad = false;
+  int? _selectedDriverId;
+  final Set<int> _selectedTechnicianIds = {};
+  String _techSearchQuery = '';
+  List<_DriverOption> _availableDrivers = [];
 
   @override
   void initState() {
@@ -55,6 +82,9 @@ class _EditJobScreenState extends State<EditJobScreen> {
       text: j.estimatedDurationMinutes.toString(),
     );
 
+    _lat = j.destinationLat; // ← NEW
+    _lng = j.destinationLng; // ← NEW
+
     // FIX 1: 'miscellaneous' — lowercase, correctly spelled to match DB/backend
     const validJobTypes = ['installation', 'delivery', 'miscellaneous'];
     _jobType = validJobTypes.contains(j.jobType) ? j.jobType : 'installation';
@@ -66,6 +96,42 @@ class _EditJobScreenState extends State<EditJobScreen> {
 
     _scheduledTimeStart = _parseTime(j.scheduledTimeStart);
     _scheduledTimeEnd = _parseTime(j.scheduledTimeEnd);
+
+    // Pre-populate selected driver and technicians from existing job data
+    _selectedDriverId = j.driverId;
+    _selectedTechnicianIds.addAll(j.technicians.map((t) => t.id));
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadAvailableDrivers();
+        _fetchDriverLoad();
+      }
+    });
+  }
+
+  Future<void> _loadAvailableDrivers() async {
+    try {
+      final users = await UserService().getUsers(role: 'technician');
+      if (mounted) {
+        setState(() {
+          _availableDrivers =
+              users.map((u) => _DriverOption(id: u.id, fullName: u.fullName)).toList();
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _fetchDriverLoad() async {
+    if (!mounted) return;
+    setState(() => _loadingDriverLoad = true);
+    try {
+      final provider = Provider.of<JobProvider>(context, listen: false);
+      await provider.fetchDriverLoad(range: _loadRange);
+      if (mounted) {
+        setState(() => _driverLoadData = provider.driverLoadStats);
+      }
+    } catch (_) {}
+    if (mounted) setState(() => _loadingDriverLoad = false);
   }
 
   TimeOfDay _parseTime(String? t) {
@@ -156,6 +222,28 @@ class _EditJobScreenState extends State<EditJobScreen> {
     }
   }
 
+  Future<void> _pickLocation() async {
+    final result = await Navigator.push<LocationPickerResult>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LocationPickerPopup(
+          initialPosition: _lat != null && _lng != null 
+              ? LatLng(_lat!, _lng!) 
+              : null,
+          initialAddress: _customerAddressController.text,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _customerAddressController.text = result.address;
+        _lat = result.position.latitude;
+        _lng = result.position.longitude;
+      });
+    }
+  }
+
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -178,6 +266,8 @@ class _EditJobScreenState extends State<EditJobScreen> {
             ? null
             : _customerPhoneController.text.trim(),
         customerAddress: _customerAddressController.text.trim(),
+        destinationLat: _lat, // ← NEW
+        destinationLng: _lng, // ← NEW
         jobType: _jobType,
         description: _descriptionController.text.trim().isEmpty
             ? null
@@ -351,6 +441,206 @@ class _EditJobScreenState extends State<EditJobScreen> {
     );
   }
 
+  Widget _buildDriverSelector() {
+    String rangeLabel() {
+      switch (_loadRange) {
+        case 'monthly':
+          return 'this month';
+        case 'yearly':
+          return 'this year';
+        default:
+          return 'this week';
+      }
+    }
+
+    final techCandidates = _availableDrivers
+        .where(
+          (d) =>
+              d.id != _selectedDriverId &&
+              d.fullName.toLowerCase().contains(
+                _techSearchQuery.toLowerCase(),
+              ),
+        )
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Primary Driver ────────────────────────────────────
+        const Text(
+          'Primary Driver',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+            color: AppTheme.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment(value: 'weekly', label: Text('Weekly')),
+            ButtonSegment(value: 'monthly', label: Text('Monthly')),
+            ButtonSegment(value: 'yearly', label: Text('Yearly')),
+          ],
+          selected: {_loadRange},
+          onSelectionChanged: (newSet) {
+            if (newSet.isNotEmpty) {
+              setState(() {
+                _loadRange = newSet.first;
+                _selectedDriverId = null;
+              });
+              _fetchDriverLoad();
+            }
+          },
+          style: ButtonStyle(
+            visualDensity: VisualDensity.compact,
+            textStyle: WidgetStateProperty.all(
+              const TextStyle(fontSize: 12),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        if (_loadingDriverLoad)
+          const Center(child: CircularProgressIndicator())
+        else if (_driverLoadData.isEmpty)
+          const Text(
+            'No driver load data available.',
+            style: TextStyle(color: AppTheme.textHint, fontSize: 13),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _driverLoadData.length,
+            itemBuilder: (context, index) {
+              final driver = _driverLoadData[index];
+              return DriverLoadCard(
+                driver: driver,
+                isSelected: _selectedDriverId == (driver['id'] as int?),
+                onTap: () {
+                  setState(() {
+                    final tappedId = driver['id'] as int?;
+                    _selectedDriverId =
+                        _selectedDriverId == tappedId ? null : tappedId;
+                    if (_selectedDriverId != null) {
+                      _selectedTechnicianIds.remove(_selectedDriverId);
+                    }
+                  });
+                },
+                rangeLabel: rangeLabel(),
+              );
+            },
+          ),
+
+        const SizedBox(height: 20),
+
+        // ── Technicians ───────────────────────────────────────
+        const Text(
+          'Technicians',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.normal,
+            color: AppTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+
+        if (_selectedTechnicianIds.isNotEmpty) ...[
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            children: _selectedTechnicianIds.map((id) {
+              final driver =
+                  _availableDrivers.where((d) => d.id == id).firstOrNull;
+              final name = driver?.fullName ?? 'Driver $id';
+              return InputChip(
+                label: Text(name, style: const TextStyle(fontSize: 13)),
+                onDeleted: () =>
+                    setState(() => _selectedTechnicianIds.remove(id)),
+                backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                deleteIconColor: AppTheme.primaryColor,
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        TextFormField(
+          decoration: InputDecoration(
+            hintText: 'Search technicians...',
+            prefixIcon: const Icon(Icons.search, size: 18),
+            filled: true,
+            fillColor: Colors.white,
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.dividerColor),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: const BorderSide(color: AppTheme.dividerColor),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide:
+                  const BorderSide(color: AppTheme.primaryColor, width: 2),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
+          onChanged: (val) => setState(() => _techSearchQuery = val),
+        ),
+
+        if (_techSearchQuery.isNotEmpty && techCandidates.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppTheme.dividerColor),
+            ),
+            child: Column(
+              children: techCandidates
+                  .where((d) => !_selectedTechnicianIds.contains(d.id))
+                  .map(
+                    (driver) => ListTile(
+                      dense: true,
+                      leading: CircleAvatar(
+                        radius: 14,
+                        backgroundColor:
+                            AppTheme.primaryColor.withOpacity(0.15),
+                        child: Text(
+                          driver.fullName.isNotEmpty
+                              ? driver.fullName[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: AppTheme.primaryColor,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        driver.fullName,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          _selectedTechnicianIds.add(driver.id);
+                          _techSearchQuery = '';
+                        });
+                      },
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -434,7 +724,38 @@ class _EditJobScreenState extends State<EditJobScreen> {
                 validator: (v) => v == null || v.trim().isEmpty
                     ? 'Address is required'
                     : null,
+                suffixIcon: IconButton(
+                  icon: const Icon(Icons.map_outlined, color: AppTheme.primaryColor),
+                  onPressed: _pickLocation,
+                  tooltip: 'Select on Map',
+                ),
               ),
+              if (_lat != null && _lng != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8, left: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.gps_fixed, size: 14, color: AppTheme.successColor),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Location coordinates captured: ${_lat!.toStringAsFixed(6)}, ${_lng!.toStringAsFixed(6)}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.successColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          _lat = null;
+                          _lng = null;
+                        }),
+                        child: const Icon(Icons.cancel, size: 16, color: AppTheme.textHint),
+                      ),
+                    ],
+                  ),
+                ),
               const SizedBox(height: 24),
 
               // ── JOB DETAILS ───────────────────────────────────────
@@ -539,6 +860,12 @@ class _EditJobScreenState extends State<EditJobScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 24),
+
+              // ── DRIVER ASSIGNMENT (load-balanced) ─────────────────
+              _sectionTitle('Assign Personnel (Optional)'),
+              const SizedBox(height: 12),
+              _buildDriverSelector(),
               const SizedBox(height: 32),
 
               // ── SAVE BUTTON ───────────────────────────────────────
@@ -592,6 +919,7 @@ class _EditJobScreenState extends State<EditJobScreen> {
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    Widget? suffixIcon, // ← NEW
   }) {
     return TextFormField(
       controller: controller,
@@ -601,6 +929,7 @@ class _EditJobScreenState extends State<EditJobScreen> {
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon),
+        suffixIcon: suffixIcon, // ← NEW
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(
