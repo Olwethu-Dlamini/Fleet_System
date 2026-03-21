@@ -17,6 +17,62 @@ const Job                   = require('../models/Job');
 const JobAssignmentService  = require('../services/jobAssignmentService');
 const db                    = require('../config/database');
 const { verifyToken }       = require('../middleware/authMiddleware');
+const { body }              = require('express-validator');
+const validate              = require('../middleware/validate');
+
+// ============================================
+// Validation schemas — FOUND-06
+// ============================================
+const createJobValidation = [
+  body('job_type')
+    .isIn(['installation', 'delivery', 'miscellaneous'])
+    .withMessage('job_type must be installation, delivery, or miscellaneous'),
+  body('customer_name')
+    .isString().trim().isLength({ min: 2, max: 100 })
+    .withMessage('customer_name must be 2-100 characters'),
+  body('customer_address')
+    .isString().trim().notEmpty()
+    .withMessage('customer_address is required'),
+  body('scheduled_date')
+    .isDate({ format: 'YYYY-MM-DD' })
+    .withMessage('scheduled_date must be YYYY-MM-DD format'),
+  body('scheduled_time_start')
+    .matches(/^\d{2}:\d{2}(:\d{2})?$/)
+    .withMessage('scheduled_time_start must be HH:MM or HH:MM:SS'),
+  body('scheduled_time_end')
+    .matches(/^\d{2}:\d{2}(:\d{2})?$/)
+    .withMessage('scheduled_time_end must be HH:MM or HH:MM:SS'),
+  body('estimated_duration_minutes')
+    .isInt({ min: 1, max: 1440 })
+    .withMessage('estimated_duration_minutes must be 1-1440'),
+  body('priority')
+    .optional().isIn(['low', 'normal', 'high', 'urgent'])
+    .withMessage('priority must be low, normal, high, or urgent'),
+  body('destination_lat')
+    .optional().isFloat({ min: -90, max: 90 })
+    .withMessage('destination_lat must be -90 to 90'),
+  body('destination_lng')
+    .optional().isFloat({ min: -180, max: 180 })
+    .withMessage('destination_lng must be -180 to 180'),
+];
+
+const updateJobValidation = [
+  body('job_type')
+    .optional().isIn(['installation', 'delivery', 'miscellaneous'])
+    .withMessage('job_type must be installation, delivery, or miscellaneous'),
+  body('customer_name')
+    .optional().isString().trim().isLength({ min: 2, max: 100 })
+    .withMessage('customer_name must be 2-100 characters'),
+  body('scheduled_date')
+    .optional().isDate({ format: 'YYYY-MM-DD' })
+    .withMessage('scheduled_date must be YYYY-MM-DD format'),
+  body('estimated_duration_minutes')
+    .optional().isInt({ min: 1, max: 1440 })
+    .withMessage('estimated_duration_minutes must be 1-1440'),
+  body('priority')
+    .optional().isIn(['low', 'normal', 'high', 'urgent'])
+    .withMessage('priority must be low, normal, high, or urgent'),
+];
 
 // ==========================================
 // GET /api/jobs
@@ -120,7 +176,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 // Create a new job.
 // Body may include technician_ids: [3, 7] to assign drivers immediately.
 // ==========================================
-router.post('/', verifyToken, async (req, res) => {
+router.post('/', verifyToken, createJobValidation, validate, async (req, res) => {
   try {
     const job = await Job.createJob(req.body);
     res.status(201).json({
@@ -221,7 +277,7 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
 // ==========================================
 // PUT /api/jobs/:id  — Full job edit (admin / scheduler)
 // ==========================================
-router.put('/:id', verifyToken, async (req, res) => {
+router.put('/:id', verifyToken, updateJobValidation, validate, async (req, res) => {
   try {
     const jobId = parseInt(req.params.id);
     if (isNaN(jobId)) {
@@ -232,6 +288,8 @@ router.put('/:id', verifyToken, async (req, res) => {
       customer_name,
       customer_phone,
       customer_address,
+      destination_lat,
+      destination_lng,
       job_type,
       description,
       scheduled_date,
@@ -261,6 +319,8 @@ router.put('/:id', verifyToken, async (req, res) => {
          customer_name               = ?,
          customer_phone              = ?,
          customer_address            = ?,
+         destination_lat             = ?,
+         destination_lng             = ?,
          job_type                    = ?,
          description                 = ?,
          scheduled_date              = ?,
@@ -274,6 +334,8 @@ router.put('/:id', verifyToken, async (req, res) => {
         customer_name,
         customer_phone             || null,
         customer_address,
+        destination_lat            || null,
+        destination_lng            || null,
         job_type,
         description                || null,
         scheduled_date,

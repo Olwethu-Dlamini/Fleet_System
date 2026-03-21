@@ -8,10 +8,42 @@ const express = require('express');
 const router  = express.Router();
 const Vehicle = require('../models/Vehicle');
 const { verifyToken, adminOnly } = require('../middleware/authMiddleware');
+const { body }  = require('express-validator');
+const validate  = require('../middleware/validate');
 
 // verifyToken + adminOnly bundled so every write route is self-contained.
 // verifyToken populates req.user; adminOnly checks req.user.role === 'admin'.
 const requireAdmin = [verifyToken, adminOnly];
+
+// ============================================
+// Validation schemas — FOUND-06
+// ============================================
+const createVehicleValidation = [
+  body('name')
+    .isString().trim().isLength({ min: 2, max: 100 })
+    .withMessage('name must be 2-100 characters'),
+  body('license_plate')
+    .isString().trim().notEmpty()
+    .withMessage('license_plate is required'),
+  body('type')
+    .optional().isString().trim().isLength({ max: 50 })
+    .withMessage('type must be 50 characters or less'),
+  body('capacity')
+    .optional().isInt({ min: 1 })
+    .withMessage('capacity must be a positive integer'),
+];
+
+const updateVehicleValidation = [
+  body('name')
+    .optional().isString().trim().isLength({ min: 2, max: 100 })
+    .withMessage('name must be 2-100 characters'),
+  body('license_plate')
+    .optional().isString().trim().notEmpty()
+    .withMessage('license_plate cannot be empty'),
+  body('status')
+    .optional().isIn(['available', 'assigned', 'maintenance', 'inactive'])
+    .withMessage('status must be available, assigned, maintenance, or inactive'),
+];
 
 // ============================================================
 // GET /api/vehicles
@@ -42,7 +74,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/vehicles  —  create  (admin only)
 // Body: { vehicle_name, license_plate, vehicle_type, capacity_kg?, notes? }
 // ============================================================
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', requireAdmin, createVehicleValidation, validate, async (req, res) => {
   try {
     const { vehicle_name, license_plate, vehicle_type, capacity_kg, notes } = req.body;
 
@@ -87,7 +119,7 @@ router.post('/', requireAdmin, async (req, res) => {
 // Body: any subset of { vehicle_name, license_plate, vehicle_type,
 //                       capacity_kg, is_active, last_maintenance_date, notes }
 // ============================================================
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', requireAdmin, updateVehicleValidation, validate, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 

@@ -20,12 +20,47 @@ const bcrypt  = require('bcryptjs');
 
 // Use shared middleware so role checks use the same USER_ROLE constants as JWT
 const { verifyToken, adminOnly, schedulerOrAbove } = require('../middleware/authMiddleware');
+const { body }  = require('express-validator');
+const validate  = require('../middleware/validate');
 
 // verifyToken must run first to populate req.user, then the role guard.
 // We wrap both into single middleware arrays so each route is self-contained
 // and works regardless of whether server.js applies a global auth middleware.
 const requireAdmin            = [verifyToken, adminOnly];
 const requireAdminOrScheduler = [verifyToken, schedulerOrAbove];
+
+// ============================================
+// Validation schemas — FOUND-06
+// ============================================
+const createUserValidation = [
+  body('username')
+    .isString().trim().isLength({ min: 3, max: 50 })
+    .withMessage('username must be 3-50 characters'),
+  body('email')
+    .isEmail().normalizeEmail()
+    .withMessage('email must be a valid email address'),
+  body('password')
+    .isLength({ min: 8 })
+    .withMessage('password must be at least 8 characters'),
+  body('role')
+    .isIn(['admin', 'scheduler', 'technician', 'dispatcher', 'driver'])
+    .withMessage('role must be admin, scheduler, technician, dispatcher, or driver'),
+  body('full_name')
+    .optional().isString().trim().isLength({ max: 100 })
+    .withMessage('full_name must be 100 characters or less'),
+];
+
+const updateUserValidation = [
+  body('email')
+    .optional().isEmail().normalizeEmail()
+    .withMessage('email must be a valid email address'),
+  body('role')
+    .optional().isIn(['admin', 'scheduler', 'technician', 'dispatcher', 'driver'])
+    .withMessage('role must be admin, scheduler, technician, dispatcher, or driver'),
+  body('full_name')
+    .optional().isString().trim().isLength({ max: 100 })
+    .withMessage('full_name must be 100 characters or less'),
+];
 
 // ── Role normalisation maps ──────────────────────────────────────────────────
 const TO_DB_ROLE   = { scheduler: 'dispatcher', technician: 'driver' };
@@ -98,7 +133,7 @@ router.get('/:id', requireAdminOrScheduler, async (req, res) => {
 // Body: { username, full_name, email, password, role, is_active? }
 // role accepts app values ('scheduler','technician') or DB values
 // ============================================================
-router.post('/', requireAdmin, async (req, res) => {
+router.post('/', requireAdmin, createUserValidation, validate, async (req, res) => {
   try {
     const { username, full_name, email, password, role, is_active = 1 } = req.body;
 
@@ -161,7 +196,7 @@ router.post('/', requireAdmin, async (req, res) => {
 // Body: any subset of { username, full_name, email, role, is_active }
 // password is NOT updated here — use /reset-password
 // ============================================================
-router.put('/:id', requireAdmin, async (req, res) => {
+router.put('/:id', requireAdmin, updateUserValidation, validate, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
