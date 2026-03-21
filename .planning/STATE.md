@@ -113,6 +113,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | Kotlin DSL google-services registration in settings.gradle.kts plugins{} block — correct AGP 8.x pattern | 05-02 FCM |
 | 2026-03-21 | FCM topic naming: driver_{userId} for technician/driver, scheduler_{userId} for admin/scheduler | 05-02 FCM |
 | 2026-03-21 | compileSdk=35, Java 17, coreLibraryDesugaring required by firebase_messaging | 05-02 FCM |
+| 2026-03-21 | Future.microtask pattern used in initState for async provider calls — standard Flutter pattern for post-frame async work | 05-03 NOTIF |
+| 2026-03-21 | PATCH method added to ApiService — required for markRead/markAllRead API calls, missing method was a blocking gap | 05-03 NOTIF |
+| 2026-03-21 | NotificationBell placed first in AppBar actions — most accessible position for primary notification UX | 05-03 NOTIF |
 
 ## Performance Metrics
 
