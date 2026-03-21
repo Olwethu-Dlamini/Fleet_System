@@ -149,6 +149,8 @@ class JobProvider extends ChangeNotifier {
     required String customerName,
     String? customerPhone,
     required String customerAddress,
+    double? destinationLat, // ← NEW
+    double? destinationLng, // ← NEW
     required String jobType,
     String? description,
     required DateTime scheduledDate,
@@ -171,6 +173,8 @@ class JobProvider extends ChangeNotifier {
         customerName: customerName,
         customerPhone: customerPhone,
         customerAddress: customerAddress,
+        destinationLat: destinationLat, // ← NEW
+        destinationLng: destinationLng, // ← NEW
         jobType: jobType,
         description: description,
         scheduledDate: scheduledDate,
@@ -375,6 +379,54 @@ class JobProvider extends ChangeNotifier {
     try {
       await _jobService.unassignVehicle(jobId: jobId);
       await _reloadSingleJob(jobId);
+      return true;
+    } catch (e) {
+      _error = e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ==========================================
+  // DRIVER LOAD  (load balancing — Phase 03)
+  // ==========================================
+  List<Map<String, dynamic>> _driverLoadStats = [];
+  List<Map<String, dynamic>> get driverLoadStats => _driverLoadStats;
+  String _loadRange = 'weekly';
+  String get loadRange => _loadRange;
+  bool _loadingDriverStats = false;
+  bool get loadingDriverStats => _loadingDriverStats;
+
+  Future<void> fetchDriverLoad({String range = 'weekly'}) async {
+    _loadRange = range;
+    _loadingDriverStats = true;
+    notifyListeners();
+    try {
+      _driverLoadStats = await _jobService.getDriverLoad(range: range);
+    } catch (e) {
+      _driverLoadStats = [];
+    }
+    _loadingDriverStats = false;
+    notifyListeners();
+  }
+
+  Future<bool> completeJobWithGps({
+    required int jobId,
+    double? lat,
+    double? lng,
+    double? accuracyM,
+    required String gpsStatus,
+  }) async {
+    try {
+      await _jobService.completeJobWithGps(
+        jobId: jobId,
+        lat: lat,
+        lng: lng,
+        accuracyM: accuracyM,
+        gpsStatus: gpsStatus,
+      );
+      await loadJobs(); // Refresh job list
+      notifyListeners();
       return true;
     } catch (e) {
       _error = e.toString();

@@ -102,6 +102,8 @@ class JobService {
     required String customerName,
     String? customerPhone,
     required String customerAddress,
+    double? destinationLat, // ← NEW
+    double? destinationLng, // ← NEW
     required String jobType,
     String? description,
     required DateTime scheduledDate,
@@ -116,6 +118,8 @@ class JobService {
         'customer_name': customerName,
         'customer_phone': customerPhone,
         'customer_address': customerAddress,
+        'destination_lat': destinationLat, // ← NEW
+        'destination_lng': destinationLng, // ← NEW
         'job_type': jobType,
         'description': description,
         'scheduled_date': _formatDate(scheduledDate),
@@ -148,6 +152,8 @@ class JobService {
     required String customerName,
     String? customerPhone,
     required String customerAddress,
+    double? destinationLat, // ← NEW
+    double? destinationLng, // ← NEW
     required String jobType,
     String? description,
     required DateTime scheduledDate,
@@ -161,6 +167,8 @@ class JobService {
         'customer_name': customerName,
         'customer_phone': customerPhone,
         'customer_address': customerAddress,
+        'destination_lat': destinationLat, // ← NEW
+        'destination_lng': destinationLng, // ← NEW
         'job_type': jobType,
         'description': description,
         'scheduled_date': _formatDate(scheduledDate),
@@ -308,6 +316,58 @@ class JobService {
       }
     } catch (e) {
       print('JobService.unassignVehicle error: $e');
+      rethrow;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // GET DRIVER LOAD  (load balancing — Phase 03)
+  // ══════════════════════════════════════════════════════════
+  Future<List<Map<String, dynamic>>> getDriverLoad({
+    String range = 'weekly',
+  }) async {
+    try {
+      final response = await apiService.get(
+        '/job-assignments/driver-load?range=$range',
+      );
+      if (response['success'] == true) {
+        return List<Map<String, dynamic>>.from(response['data'] as List);
+      }
+      throw Exception('Failed to load driver stats');
+    } catch (e) {
+      print('JobService.getDriverLoad error: $e');
+      rethrow;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════
+  // COMPLETE JOB WITH GPS  (Phase 03)
+  // ══════════════════════════════════════════════════════════
+  Future<Map<String, dynamic>> completeJobWithGps({
+    required int jobId,
+    double? lat,
+    double? lng,
+    double? accuracyM,
+    required String gpsStatus,
+  }) async {
+    try {
+      final data = <String, dynamic>{
+        'job_id': jobId,
+        'lat': lat,
+        'lng': lng,
+        'accuracy_m': accuracyM,
+        'gps_status': gpsStatus,
+      };
+      final response = await apiService.post(
+        '/job-status/complete',
+        data: data,
+      );
+      if (response['success'] == true) {
+        return response['data'] as Map<String, dynamic>? ?? response;
+      }
+      throw Exception(response['message'] ?? 'Failed to complete job');
+    } catch (e) {
+      print('JobService.completeJobWithGps error: $e');
       rethrow;
     }
   }
