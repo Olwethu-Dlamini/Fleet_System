@@ -3,6 +3,9 @@
 # ===============================
 FROM node:20-alpine
 
+# Enforce UTC timezone for Node.js process — prevents date shift bugs when server TZ differs
+ENV TZ=UTC
+
 # Create working directory
 WORKDIR /app
 
