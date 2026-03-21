@@ -140,7 +140,11 @@ Plans:
 - [ ] Toggle switches between driver and client views on weekday schedule
 - [ ] Badge counts are accurate and update in real-time
 
-**Estimated plans:** 2
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependencyó Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
+- [ ] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filteró Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
 
 ---
 
@@ -275,7 +279,11 @@ Plans:
 - [ ] New deployment can be stood up following the guide alone
 - [ ] Documentation reviewed for accuracy
 
-**Estimated plans:** 2
+**Plans:** 2 plans
+
+Plans:
+- [ ] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependencyó Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
+- [ ] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filteró Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
 
 ---
 
@@ -311,3 +319,4 @@ Phase 9 (Docs) ‚Üê‚îÄ‚îÄ Phase 8
 *Phase 1 gap closure plan added: 2026-03-21*
 *Phase 2 plans created: 2026-03-21*
 *Phase 3 plans created: 2026-03-21*
+*Phase 4 plans created: 2026-03-21*
