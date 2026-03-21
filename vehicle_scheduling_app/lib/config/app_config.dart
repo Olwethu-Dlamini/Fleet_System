@@ -91,7 +91,11 @@ class AppConfig {
   // DASHBOARD
   // GET /api/dashboard/summary
   // GET /api/dashboard/stats
+  // GET /api/dashboard/chart-data
   static const String dashboardEndpoint = '/dashboard';
+
+  // GET /api/dashboard/chart-data
+  static String get dashboardChartEndpoint => '$dashboardEndpoint/chart-data';
 
   // REPORTS
   // GET /api/reports/jobs-per-vehicle
