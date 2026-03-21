@@ -8,7 +8,7 @@
 
 | Phase | Name | Requirements | Risk | Dependencies |
 |-------|------|-------------|------|--------------|
-| 1 | Foundation & Security Hardening | 5/5 | Complete   | 2026-03-21 |
+| 1 | Foundation & Security Hardening | 5/5 | Complete    | 2026-03-21 |
 | 2 | User, Vehicle & Scheduler Enhancements | USR-01–03, MAINT-01–05, SCHED-01–04 | MEDIUM | Phase 1 (tenant_id) |
 | 3 | Job Assignment & Status Automation | ASGN-01–05, STAT-01–04 | MEDIUM | Phase 1 (race condition fixes) |
 | 4 | Dashboard & Views | DASH-01–04 | LOW | Phase 2 (scheduler role), Phase 3 (job counts) |
