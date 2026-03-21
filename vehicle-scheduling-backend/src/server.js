@@ -245,6 +245,40 @@ if (require.main === module) {
       await db.query('SELECT 1 as test');
       logger.info('Database connection verified');
 
+      // ============================================
+      // DB MIGRATION: Notification tables (Phase 5)
+      // Idempotent — safe to run on every startup
+      // ============================================
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS notifications (
+          id              INT AUTO_INCREMENT PRIMARY KEY,
+          tenant_id       INT NOT NULL,
+          user_id         INT NOT NULL,
+          job_id          INT,
+          type            VARCHAR(50) NOT NULL,
+          title           VARCHAR(255) NOT NULL,
+          body            TEXT NOT NULL,
+          is_read         BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_notifications_tenant_user (tenant_id, user_id),
+          INDEX idx_notifications_job (job_id),
+          INDEX idx_notifications_created (created_at)
+        )
+      `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS notification_preferences (
+          id              INT AUTO_INCREMENT PRIMARY KEY,
+          tenant_id       INT NOT NULL,
+          user_id         INT NOT NULL UNIQUE,
+          email_enabled   BOOLEAN NOT NULL DEFAULT TRUE,
+          push_enabled    BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          INDEX idx_notif_prefs_user (user_id)
+        )
+      `);
+      logger.info('Notification tables ensured');
+
       const { startCronJobs } = require('./services/cronService');
       startCronJobs();
 
