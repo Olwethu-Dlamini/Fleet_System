@@ -11,51 +11,47 @@
 // RULE:
 // - NEVER bake full URLs into endpoints
 // - Endpoints must ALWAYS be relative paths
+//
+// HOW TO SWITCH ENVIRONMENTS:
+// - Set `useLocal = true`  → uses localhost (local dev)
+// - Set `useLocal = false` → uses AWS EC2 (production)
 // ============================================
 
 import 'package:flutter/foundation.dart';
 
 class AppConfig {
   // ==========================================
+  // 🔧 ENVIRONMENT SWITCH (change this only)
+  // ==========================================
+  static const bool useLocal = true; // true = local dev | false = AWS
+
+  // ==========================================
   // BASE URLs (per environment)
   // ==========================================
 
-  // Web / Browser (PRIMARY for now)
+  // Local Web / Browser
   static const String baseUrlWeb = 'http://localhost:3000/api';
 
-  // Android Emulator (kept for future use)
+  // Local Android Emulator
   static const String baseUrlAndroid = 'http://10.0.2.2:3000/api';
 
-  // ==========================================
-  // ❌ REAL DEVICE (TEMPORARILY DISABLED)
-  // ==========================================
-  // Reason:
-  // - Not needed for Flutter Web
-  // - Causes CORS / cross-origin issues in browser
-  //
-  // To re-enable later:
-  // 1. Uncomment below
-  // 2. Ensure backend allows external connections
-  // 3. Ensure CORS is configured
-  //
-  // static const String baseUrlDevice =
-  //     'http://172.16.100.56:3000/api';
-  //
-  // Alternative (AWS):
-  // static const String baseUrlDevice =
-  //     'http://3.231.191.15:8080/api';
+  // AWS EC2 (Docker exposes port 8080 → internal 3000)
+  static const String baseUrlAWS = 'http://3.231.191.15:8080/api';
 
   // ==========================================
   // ACTIVE BASE URL (AUTO SELECT)
   // ==========================================
   static String get baseUrl {
-    // Web → use localhost
-    if (kIsWeb) {
-      return baseUrlWeb;
+    // ── LOCAL DEV MODE ──────────────────────
+    if (useLocal) {
+      if (kIsWeb) {
+        return baseUrlWeb;      // Browser → localhost:3000
+      }
+      return baseUrlAndroid;    // Emulator → 10.0.2.2:3000
     }
 
-    // Mobile → emulator (safe default)
-    return baseUrlAndroid;
+    // ── PRODUCTION MODE (AWS) ───────────────
+    return baseUrlAWS;          // All platforms → EC2:8080
   }
 
   // ==========================================
@@ -117,6 +113,20 @@ class AppConfig {
   // GET  /api/availability/vehicles
   // POST /api/availability/check-drivers
   static const String availabilityEndpoint = '/availability';
+
+  // VEHICLE MAINTENANCE
+  // GET    /api/vehicle-maintenance?vehicle_id=X
+  // GET    /api/vehicle-maintenance/active
+  // POST   /api/vehicle-maintenance
+  // PUT    /api/vehicle-maintenance/:id
+  // DELETE /api/vehicle-maintenance/:id
+  static const String vehicleMaintenanceEndpoint = '/vehicle-maintenance';
+
+  // SETTINGS
+  // GET /api/settings
+  // GET /api/settings/:key
+  // PUT /api/settings/:key
+  static const String settingsEndpoint = '/settings';
 
   // ==========================================
   // NETWORK CONFIG

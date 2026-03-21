@@ -50,6 +50,16 @@ const createUserValidation = [
   body('full_name')
     .optional().isString().trim().isLength({ max: 100 })
     .withMessage('full_name must be 100 characters or less'),
+  body('contact_phone')
+    .optional({ nullable: true })
+    .isString().trim()
+    .matches(/^\+?[\d\s\-\(\)]{7,20}$/)
+    .withMessage('contact_phone must be a valid phone number'),
+  body('contact_phone_secondary')
+    .optional({ nullable: true })
+    .isString().trim()
+    .matches(/^\+?[\d\s\-\(\)]{7,20}$/)
+    .withMessage('contact_phone_secondary must be a valid phone number'),
 ];
 
 const updateUserValidation = [
@@ -62,6 +72,16 @@ const updateUserValidation = [
   body('full_name')
     .optional().isString().trim().isLength({ max: 100 })
     .withMessage('full_name must be 100 characters or less'),
+  body('contact_phone')
+    .optional({ nullable: true })
+    .isString().trim()
+    .matches(/^\+?[\d\s\-\(\)]{7,20}$/)
+    .withMessage('contact_phone must be a valid phone number'),
+  body('contact_phone_secondary')
+    .optional({ nullable: true })
+    .isString().trim()
+    .matches(/^\+?[\d\s\-\(\)]{7,20}$/)
+    .withMessage('contact_phone_secondary must be a valid phone number'),
 ];
 
 // ── Role normalisation maps ──────────────────────────────────────────────────
@@ -96,7 +116,7 @@ router.get('/', requireAdminOrScheduler, async (req, res) => {
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
     const [rows] = await db.query(
-      `SELECT id, username, full_name, role, email, is_active, created_at
+      `SELECT id, username, full_name, role, email, is_active, contact_phone, contact_phone_secondary, created_at
        FROM users ${where} ORDER BY full_name ASC`,
       params,
     );
@@ -114,7 +134,7 @@ router.get('/', requireAdminOrScheduler, async (req, res) => {
 router.get('/:id', requireAdminOrScheduler, async (req, res) => {
   try {
     const [rows] = await db.query(
-      `SELECT id, username, full_name, role, email, is_active, created_at
+      `SELECT id, username, full_name, role, email, is_active, contact_phone, contact_phone_secondary, created_at
        FROM users WHERE id = ?`,
       [parseInt(req.params.id)],
     );
@@ -137,7 +157,8 @@ router.get('/:id', requireAdminOrScheduler, async (req, res) => {
 // ============================================================
 router.post('/', requireAdmin, createUserValidation, validate, async (req, res) => {
   try {
-    const { username, full_name, email, password, role, is_active = 1 } = req.body;
+    const { username, full_name, email, password, role, is_active = 1,
+            contact_phone = null, contact_phone_secondary = null } = req.body;
 
     // Validate required fields
     const missing = ['username','full_name','email','password','role']
@@ -163,14 +184,16 @@ router.post('/', requireAdmin, createUserValidation, validate, async (req, res) 
     const password_hash = await bcrypt.hash(password, 10);
 
     const [result] = await db.query(
-      `INSERT INTO users (username, full_name, email, password_hash, role, is_active)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO users (username, full_name, email, password_hash, role, is_active,
+                          contact_phone, contact_phone_secondary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [username.trim(), full_name.trim(), email.trim().toLowerCase(),
-       password_hash, dbRole, is_active ? 1 : 0],
+       password_hash, dbRole, is_active ? 1 : 0,
+       contact_phone || null, contact_phone_secondary || null],
     );
 
     const [rows] = await db.query(
-      `SELECT id, username, full_name, role, email, is_active, created_at
+      `SELECT id, username, full_name, role, email, is_active, contact_phone, contact_phone_secondary, created_at
        FROM users WHERE id = ?`,
       [result.insertId],
     );
@@ -210,7 +233,7 @@ router.put('/:id', requireAdmin, updateUserValidation, validate, async (req, res
       });
     }
 
-    const allowed = ['username', 'full_name', 'email', 'role', 'is_active'];
+    const allowed = ['username', 'full_name', 'email', 'role', 'is_active', 'contact_phone', 'contact_phone_secondary'];
     const setClauses = [];
     const values     = [];
 
@@ -247,7 +270,7 @@ router.put('/:id', requireAdmin, updateUserValidation, validate, async (req, res
     }
 
     const [rows] = await db.query(
-      `SELECT id, username, full_name, role, email, is_active, created_at
+      `SELECT id, username, full_name, role, email, is_active, contact_phone, contact_phone_secondary, created_at
        FROM users WHERE id = ?`,
       [id],
     );

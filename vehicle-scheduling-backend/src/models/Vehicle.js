@@ -40,27 +40,34 @@ class Vehicle {
     try {
       // Build SQL query based on activeOnly parameter
       let sql = `
-        SELECT 
-          id,
-          vehicle_name,
-          license_plate,
-          vehicle_type,
-          capacity_kg,
-          is_active,
-          last_maintenance_date,
-          notes,
-          created_at,
-          updated_at
-        FROM vehicles
+        SELECT
+          v.id,
+          v.vehicle_name,
+          v.license_plate,
+          v.vehicle_type,
+          v.capacity_kg,
+          v.is_active,
+          v.last_maintenance_date,
+          v.notes,
+          v.created_at,
+          v.updated_at,
+          CASE WHEN EXISTS (
+            SELECT 1 FROM vehicle_maintenance vm
+            WHERE vm.vehicle_id = v.id
+              AND vm.status IN ('scheduled', 'in_progress')
+              AND vm.start_date <= CURDATE()
+              AND vm.end_date   >= CURDATE()
+          ) THEN 1 ELSE 0 END AS is_in_maintenance
+        FROM vehicles v
       `;
-      
+
       // If activeOnly is true, add WHERE clause to filter
       if (activeOnly) {
-        sql += ' WHERE is_active = 1';
+        sql += ' WHERE v.is_active = 1';
       }
-      
+
       // Add ORDER BY to show results in consistent order
-      sql += ' ORDER BY vehicle_name ASC';
+      sql += ' ORDER BY v.vehicle_name ASC';
       
       // Execute query
       // db.query returns [rows, fields] - we only need rows
@@ -368,7 +375,7 @@ class Vehicle {
       // This query finds vehicles that are NOT assigned to any job
       // during the specified time period
       const sql = `
-        SELECT 
+        SELECT
           v.id,
           v.vehicle_name,
           v.license_plate,
@@ -390,10 +397,18 @@ class Vehicle {
             AND ? > j.scheduled_time_start
           )
         )
+        AND v.id NOT IN (
+          -- Exclude vehicles with overlapping maintenance windows
+          SELECT vm.vehicle_id
+          FROM vehicle_maintenance vm
+          WHERE vm.status IN ('scheduled', 'in_progress')
+            AND vm.start_date <= ?
+            AND vm.end_date   >= ?
+        )
         ORDER BY v.vehicle_name ASC
       `;
-      
-      const [rows] = await db.query(sql, [date, startTime, endTime]);
+
+      const [rows] = await db.query(sql, [date, startTime, endTime, date, date]);
       return rows;
       
     } catch (error) {

@@ -17,8 +17,10 @@ const jobAssignmentRoutes = require('./jobAssignmentRoutes');
 const jobStatusRoutes     = require('./jobStatusRoutes');
 const dashboardRoutes     = require('./dashboard');
 const reportsRoutes       = require('./reports');
-const userRoutes          = require('./users');           // ← NEW
-const availabilityRoutes  = require('./availabilityRoutes'); // ← NEW
+const userRoutes              = require('./users');               // ← NEW
+const availabilityRoutes      = require('./availabilityRoutes');  // ← NEW
+const vehicleMaintenanceRoutes = require('./vehicle-maintenance'); // ← Phase 2
+const settingsRoutes           = require('./settings');            // ← Phase 2
 
 // ==========================================
 // REGISTER ROUTES
@@ -31,8 +33,10 @@ router.use('/job-assignments', jobAssignmentRoutes);   // /api/job-assignments
 router.use('/job-status',      jobStatusRoutes);       // /api/job-status
 router.use('/dashboard',       dashboardRoutes);       // /api/dashboard
 router.use('/reports',         reportsRoutes);         // /api/reports
-router.use('/users',           userRoutes);            // /api/users  ← NEW
-router.use('/availability',    availabilityRoutes);    // /api/availability ← NEW
+router.use('/users',               userRoutes);               // /api/users  ← NEW
+router.use('/availability',        availabilityRoutes);        // /api/availability ← NEW
+router.use('/vehicle-maintenance', vehicleMaintenanceRoutes);  // /api/vehicle-maintenance ← Phase 2
+router.use('/settings',            settingsRoutes);             // /api/settings ← Phase 2
 
 // ==========================================
 // HEALTH CHECK

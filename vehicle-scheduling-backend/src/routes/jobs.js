@@ -16,7 +16,7 @@ const router    = express.Router();
 const Job                   = require('../models/Job');
 const JobAssignmentService  = require('../services/jobAssignmentService');
 const db                    = require('../config/database');
-const { verifyToken }       = require('../middleware/authMiddleware');
+const { verifyToken, requirePermission } = require('../middleware/authMiddleware');
 const { body }              = require('express-validator');
 const validate              = require('../middleware/validate');
 const logger = require('../config/logger');
@@ -476,5 +476,66 @@ router.delete('/:id/vehicle', verifyToken, async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// ============================================
+// PUT /api/jobs/:id/swap-vehicle — SCHED-02
+// Scheduler or admin can swap the vehicle on an existing job assignment
+// ============================================
+router.put('/:id/swap-vehicle',
+  verifyToken,
+  requirePermission('assignments:update'),
+  body('new_vehicle_id').isInt({ min: 1 }).withMessage('new_vehicle_id must be a positive integer'),
+  body('note').optional().isString().trim().isLength({ max: 500 }),
+  validate,
+  async (req, res) => {
+    const jobId = parseInt(req.params.id);
+    const { new_vehicle_id, note } = req.body;
+    try {
+      // 1. Get job details to check date/time
+      const [jobRows] = await db.query(
+        'SELECT id, scheduled_date, scheduled_time_start, scheduled_time_end, current_status FROM jobs WHERE id = ?',
+        [jobId]
+      );
+      if (!jobRows.length) return res.status(404).json({ success: false, message: 'Job not found' });
+      const job = jobRows[0];
+
+      // 2. Check vehicle exists and is active
+      const [vRows] = await db.query('SELECT id, vehicle_name FROM vehicles WHERE id = ? AND is_active = 1', [new_vehicle_id]);
+      if (!vRows.length) return res.status(404).json({ success: false, message: 'Vehicle not found or inactive' });
+
+      // 3. Check new vehicle is available (not assigned to another job at this time)
+      const Vehicle = require('../models/Vehicle');
+      const available = await Vehicle.getAvailableVehicles(
+        job.scheduled_date, job.scheduled_time_start, job.scheduled_time_end
+      );
+      const isAvailable = available.some(v => v.id === new_vehicle_id);
+      // Also allow if the vehicle is the one currently assigned to this job
+      const [currentAssignment] = await db.query(
+        'SELECT vehicle_id FROM job_assignments WHERE job_id = ?', [jobId]
+      );
+      const currentVehicleId = currentAssignment.length ? currentAssignment[0].vehicle_id : null;
+      if (!isAvailable && currentVehicleId !== new_vehicle_id) {
+        return res.status(409).json({ success: false, message: 'Vehicle is not available for this time slot' });
+      }
+
+      // 4. Update assignment
+      const noteSql    = note ? ', notes = ?' : '';
+      const noteParams = note ? [note] : [];
+      const [result] = await db.query(
+        `UPDATE job_assignments SET vehicle_id = ?${noteSql} WHERE job_id = ?`,
+        [new_vehicle_id, ...noteParams, jobId]
+      );
+      if (!result.affectedRows) {
+        return res.status(404).json({ success: false, message: 'No assignment found for this job' });
+      }
+
+      log.info({ jobId, new_vehicle_id, swapped_by: req.user.id }, 'Vehicle swapped on job');
+      res.json({ success: true, message: 'Vehicle swapped successfully', vehicle: vRows[0] });
+    } catch (err) {
+      log.error({ err }, 'PUT /api/jobs/:id/swap-vehicle error');
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
 
 module.exports = router;
