@@ -15,6 +15,7 @@ import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
+import 'package:vehicle_scheduling_app/providers/time_extension_provider.dart';
 import 'package:vehicle_scheduling_app/screens/login_screen.dart';
 import 'package:vehicle_scheduling_app/screens/dashboard/dashboard_screen.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/jobs_list_screen.dart';
@@ -43,6 +44,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => JobProvider()),
         ChangeNotifierProvider(create: (_) => VehicleProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
+        ChangeNotifierProvider(create: (_) => TimeExtensionProvider()),
       ],
       child: const VehicleSchedulingApp(),
     ),
@@ -58,6 +60,7 @@ class VehicleSchedulingApp extends StatelessWidget {
       title: 'Vehicle Scheduling',
       theme: AppTheme.lightTheme,
       debugShowCheckedModeBanner: false,
+      navigatorKey: FcmService.navigatorKey,
       home: const AuthGate(),
     );
   }

@@ -1,13 +1,16 @@
 // ============================================
 // FILE: lib/services/fcm_service.dart
 // PURPOSE: Firebase Cloud Messaging initialization,
-//          device token retrieval, foreground notification display
-// Requirements: NOTIF-01, NOTIF-06
+//          device token retrieval, foreground notification display,
+//          and deep-link routing on notification tap
+// Requirements: NOTIF-01, NOTIF-06, TIME-05, TIME-06, TIME-07
 // ============================================
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:vehicle_scheduling_app/screens/time_management/time_extension_approval_screen.dart';
 
 // Top-level function — required by firebase_messaging background handler.
 // Must be annotated with @pragma('vm:entry-point') so the Dart VM
@@ -22,6 +25,13 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 class FcmService {
   static final FlutterLocalNotificationsPlugin _localNotifs =
       FlutterLocalNotificationsPlugin();
+
+  /// Global navigator key used for notification tap routing.
+  ///
+  /// Must be set as `navigatorKey` on MaterialApp in main.dart so that
+  /// [_routeToNotification] can push routes without a BuildContext.
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
 
   /// Initialize Firebase, background handler, notification channel,
   /// local notifications plugin, and foreground message listener.
@@ -77,6 +87,58 @@ class FcmService {
         );
       }
     });
+
+    // App opened from a notification tap (terminated → foreground)
+    final initialMessage = await FirebaseMessaging.instance.getInitialMessage();
+    if (initialMessage != null) {
+      _routeToNotification(initialMessage.data);
+    }
+
+    // App opened from a notification tap (background → foreground)
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      _routeToNotification(message.data);
+    });
+  }
+
+  /// Routes the user to the correct screen based on the FCM data payload type.
+  ///
+  /// Payload shape from backend:
+  ///   { "type": "time_extension_requested", "jobId": "42", "requestId": "7" }
+  ///   { "type": "time_extension_approved",  "jobId": "42" }
+  ///   { "type": "time_extension_denied",    "jobId": "42" }
+  static void _routeToNotification(Map<String, dynamic> data) {
+    final type = data['type'] as String?;
+    final navigator = navigatorKey.currentState;
+    if (navigator == null || type == null) return;
+
+    switch (type) {
+      case 'time_extension_requested':
+        // Deep-link directly to scheduler approval screen
+        final jobIdRaw = data['jobId'] ?? data['job_id'];
+        final requestIdRaw = data['requestId'] ?? data['request_id'];
+        final jobId = jobIdRaw != null ? int.tryParse(jobIdRaw.toString()) : null;
+        final requestId =
+            requestIdRaw != null ? int.tryParse(requestIdRaw.toString()) : null;
+        if (jobId != null) {
+          navigator.push(
+            MaterialPageRoute(
+              builder: (_) => TimeExtensionApprovalScreen(
+                jobId: jobId,
+                requestId: requestId,
+              ),
+            ),
+          );
+        }
+        break;
+
+      case 'time_extension_approved':
+      case 'time_extension_denied':
+        // Navigate to job detail — job_detail_screen requires a Job object,
+        // so we pop back to jobs list and let the user tap the job.
+        // This is the standard pattern for notification-to-list navigation.
+        navigator.popUntil((route) => route.isFirst);
+        break;
+    }
   }
 
   /// Get FCM registration token for this device.
