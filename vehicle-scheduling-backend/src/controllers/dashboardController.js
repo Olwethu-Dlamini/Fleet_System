@@ -63,7 +63,7 @@ class DashboardController {
         ),
 
         // 2. Today's jobs (full job objects with vehicle/technician info)
-        Job.getJobsByDate(today),
+        Job.getJobsByDate(today, null, tenantId),
 
         // 3. Last 10 status changes across all jobs (scoped to tenant)
         db.query(

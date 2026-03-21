@@ -314,11 +314,11 @@ class Job {
    * @param {string} statusFilter - Optional: filter by status ('pending', 'assigned', etc.)
    * @returns {Promise<Array>} Array of jobs for that date
    */
-  static async getJobsByDate(date, statusFilter = null) {
+  static async getJobsByDate(date, statusFilter = null, tenantId = null) {
     try {
       // Base SQL query
       let sql = `
-        SELECT 
+        SELECT
           j.id,
           j.job_number,
           j.job_type,
@@ -353,6 +353,12 @@ class Job {
       `;
 
       const params = [date];
+
+      // Add tenant scoping if provided
+      if (tenantId) {
+        sql += ' AND j.tenant_id = ?';
+        params.push(tenantId);
+      }
 
       // Add status filter if provided
       if (statusFilter) {
