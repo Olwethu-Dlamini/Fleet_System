@@ -113,7 +113,12 @@ Plans:
 - [ ] Only assigned personnel can mark jobs complete
 - [ ] Completion records include GPS coordinates
 
-**Estimated plans:** 3–4
+**Plans:** 3 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — DB migration (assignment_history, job_completions, nullable changed_by) + driver load stats endpoint + assignment history logging
+- [ ] 03-02-PLAN.md — Cron auto-transition service + job completion endpoint with personnel auth and GPS storage
+- [ ] 03-03-PLAN.md — Flutter UI: driver load picker with green glow/suggested chip, technician chips, completion flow with GPS capture
 
 ---
 
@@ -305,3 +310,4 @@ Phase 9 (Docs) ←── Phase 8
 *Phase 1 plans created: 2026-03-21*
 *Phase 1 gap closure plan added: 2026-03-21*
 *Phase 2 plans created: 2026-03-21*
+*Phase 3 plans created: 2026-03-21*
