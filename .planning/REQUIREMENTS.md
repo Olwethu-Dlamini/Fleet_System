@@ -57,18 +57,18 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Vehicle Maintenance (MAINT)
 
-- [ ] **MAINT-01**: "Schedule Maintenance" button on vehicle detail screen
-- [ ] **MAINT-02**: Maintenance scheduling with date range and description
-- [ ] **MAINT-03**: Vehicles in maintenance excluded from job assignment picker on those dates
-- [ ] **MAINT-04**: Maintenance history log per vehicle
-- [ ] **MAINT-05**: Visual indicator on vehicle list for vehicles currently in maintenance
+- [x] **MAINT-01**: "Schedule Maintenance" button on vehicle detail screen
+- [x] **MAINT-02**: Maintenance scheduling with date range and description
+- [x] **MAINT-03**: Vehicles in maintenance excluded from job assignment picker on those dates
+- [x] **MAINT-04**: Maintenance history log per vehicle
+- [x] **MAINT-05**: Visual indicator on vehicle list for vehicles currently in maintenance
 
 ### Scheduler Role & Permissions (SCHED)
 
-- [ ] **SCHED-01**: Scheduler role with same permissions as admin EXCEPT cannot add/remove vehicles or users
-- [ ] **SCHED-02**: Scheduler can swap vehicles on existing jobs
-- [ ] **SCHED-03**: Permission matrix enforced on both backend API and Flutter UI
-- [ ] **SCHED-04**: Admin can toggle whether scheduler sees live GPS (visibility control)
+- [x] **SCHED-01**: Scheduler role with same permissions as admin EXCEPT cannot add/remove vehicles or users
+- [x] **SCHED-02**: Scheduler can swap vehicles on existing jobs
+- [x] **SCHED-03**: Permission matrix enforced on both backend API and Flutter UI
+- [x] **SCHED-04**: Admin can toggle whether scheduler sees live GPS (visibility control)
 
 ### Dashboard & Views (DASH)
 
@@ -90,9 +90,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### User Management (USR)
 
-- [ ] **USR-01**: Contact number field on user creation form
-- [ ] **USR-02**: Contact number displayed on user profile/detail view
-- [ ] **USR-03**: Contact number field on edit user form
+- [x] **USR-01**: Contact number field on user creation form
+- [x] **USR-02**: Contact number displayed on user profile/detail view
+- [x] **USR-03**: Contact number field on edit user form
 
 ### Testing & Quality (TEST)
 

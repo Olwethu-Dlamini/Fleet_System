@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: Not started
-status: planning
-stopped_at: Completed 01-05-PLAN.md
-last_updated: "2026-03-21T11:27:05.021Z"
+current_plan: 1
+status: executing
+stopped_at: Completed 02-01-PLAN.md
+last_updated: "2026-03-21T12:57:04.277Z"
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
   percent: 100
 ---
 
@@ -21,27 +21,27 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Schedulers can efficiently assign, monitor, and adjust jobs in real-time so no job falls through the cracks
-**Current focus:** Phase 01 — Foundation & Security Hardening
+**Current focus:** Phase 02 — user-vehicle-scheduler-enhancements
 
 ## Milestone: v1.0
 
-**Status:** Ready to plan
+**Status:** Executing Phase 02
 **Phases:** 9 total
 **Requirements:** 62 v1 requirements mapped across all phases
 
 ## Current Phase
 
 **Phase:** 2
-**Status:** Complete (01-01, 01-02, 01-03, 01-04, 01-05 complete)
-**Current Plan:** Not started
-**Requirements:** FOUND-01 to FOUND-10
+**Status:** In Progress (02-01 complete)
+**Current Plan:** 2
+**Requirements:** USR-01 to SCHED-04
 
 ## Phase Progress
 
 | Phase | Name | Status | Plans |
 |-------|------|--------|-------|
 | 1 | Foundation & Security Hardening | ● Complete | 5/5 |
-| 2 | User, Vehicle & Scheduler Enhancements | ○ Not started | 0/0 |
+| 2 | User, Vehicle & Scheduler Enhancements | ◑ In Progress | 1/3 |
 | 3 | Job Assignment & Status Automation | ○ Not started | 0/0 |
 | 4 | Dashboard & Views | ○ Not started | 0/0 |
 | 5 | Notifications & Alerts | ○ Not started | 0/0 |
@@ -86,6 +86,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | JWT fallback secret removed entirely — startup guard in server.js enforces JWT_SECRET at boot | FOUND-04 gap closure |
 | 2026-03-21 | tenant_id added to authController jwt.sign() — both login paths now produce identical JWT payloads | FOUND-04 gap closure |
 | 2026-03-21 | All console.* replaced with pino child loggers across all 16 src/ files — FOUND-10 fully satisfied | FOUND-10 gap closure |
+| 2026-03-21 | Soft-delete maintenance records via status=completed — hard delete violates audit trail | 02-01 MAINT |
+| 2026-03-21 | Settings upsert: UPDATE first then INSERT if affectedRows===0 to avoid REPLACE INTO ID reset | 02-01 SCHED-04 |
+| 2026-03-21 | requirePermission(assignments:update) on swap-vehicle for strict backend enforcement | 02-01 SCHED-02 |
 
 ## Performance Metrics
 
@@ -96,11 +99,12 @@ Progress: [██████████] 100% (Phase 1)
 | 01 | 03 | 3 | 3/3 | 8 |
 | 01 | 04 | 18 | 3/3 | 10 |
 | 01 | 05 | 18 | 2/2 | 16 |
+| 02 | 01 | 20 | 2/2 | 9 |
 
 ## Session
 
-**Last session:** 2026-03-21T11:21:56.168Z
-**Stopped at:** Completed 01-05-PLAN.md
+**Last session:** 2026-03-21T12:57:04.272Z
+**Stopped at:** Completed 02-01-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
