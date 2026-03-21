@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 1
+current_plan: 2
 status: executing
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-21T12:57:04.277Z"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-21T13:05:58.616Z"
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 100
 ---
 
@@ -41,7 +41,7 @@ See: .planning/PROJECT.md (updated 2026-03-21)
 | Phase | Name | Status | Plans |
 |-------|------|--------|-------|
 | 1 | Foundation & Security Hardening | ● Complete | 5/5 |
-| 2 | User, Vehicle & Scheduler Enhancements | ◑ In Progress | 1/3 |
+| 2 | User, Vehicle & Scheduler Enhancements | ◑ In Progress | 2/3 |
 | 3 | Job Assignment & Status Automation | ○ Not started | 0/0 |
 | 4 | Dashboard & Views | ○ Not started | 0/0 |
 | 5 | Notifications & Alerts | ○ Not started | 0/0 |
@@ -89,6 +89,8 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | Soft-delete maintenance records via status=completed — hard delete violates audit trail | 02-01 MAINT |
 | 2026-03-21 | Settings upsert: UPDATE first then INSERT if affectedRows===0 to avoid REPLACE INTO ID reset | 02-01 SCHED-04 |
 | 2026-03-21 | requirePermission(assignments:update) on swap-vehicle for strict backend enforcement | 02-01 SCHED-02 |
+| 2026-03-21 | Pass canUpdate/canDelete booleans into _UserCard — avoids BuildContext dependency in StatelessWidget | 02-02 USR |
+| 2026-03-21 | Screen guard uses hasPermission('users:read') not isAdmin — role-agnostic access for future scheduler permissions | 02-02 SCHED-03 |
 
 ## Performance Metrics
 
@@ -100,11 +102,12 @@ Progress: [██████████] 100% (Phase 1)
 | 01 | 04 | 18 | 3/3 | 10 |
 | 01 | 05 | 18 | 2/2 | 16 |
 | 02 | 01 | 20 | 2/2 | 9 |
+| 02 | 02 | 7 | 2/2 | 5 |
 
 ## Session
 
-**Last session:** 2026-03-21T12:57:04.272Z
-**Stopped at:** Completed 02-01-PLAN.md
+**Last session:** 2026-03-21T13:05:58.611Z
+**Stopped at:** Completed 02-02-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
