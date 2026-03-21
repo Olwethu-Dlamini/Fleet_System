@@ -47,6 +47,8 @@ import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/services/api_service.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/job_detail_screen.dart';
 import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
+import 'package:vehicle_scheduling_app/widgets/common/notification_bell.dart';
+import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
 
 // ── Pattern types for stat card decorative art ─────────────────
 enum _PatternType { circles, dots, waves, diagonal }
@@ -166,6 +168,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     Future.microtask(() {
       if (mounted) _loadDashboard();
+      if (mounted) {
+        context.read<NotificationProvider>().refreshUnreadCount();
+      }
     });
   }
 
@@ -316,6 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text('Dashboard'),
         actions: [
+          const NotificationBell(),
           if (auth.isAdmin)
             IconButton(
               icon: const Icon(Icons.people_outlined),
