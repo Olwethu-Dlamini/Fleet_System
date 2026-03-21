@@ -73,8 +73,8 @@ Requirements for initial release. Each maps to roadmap phases.
 ### Dashboard & Views (DASH)
 
 - [x] **DASH-01**: "Jobs Today" card on dashboard shows scheduler preview (reference existing graphs page)
-- [ ] **DASH-02**: Weekend jobs view — button to filter/show weekend-scheduled jobs
-- [ ] **DASH-03**: Weekday view toggle — switch between drivers-assigned view and clients view
+- [x] **DASH-02**: Weekend jobs view — button to filter/show weekend-scheduled jobs
+- [x] **DASH-03**: Weekday view toggle — switch between drivers-assigned view and clients view
 - [x] **DASH-04**: Job count badges on dashboard cards
 
 ### GPS & Maps (GPS)
