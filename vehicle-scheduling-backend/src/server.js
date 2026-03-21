@@ -245,6 +245,9 @@ if (require.main === module) {
       await db.query('SELECT 1 as test');
       logger.info('Database connection verified');
 
+      const { startCronJobs } = require('./services/cronService');
+      startCronJobs();
+
       app.listen(PORT, () => {
         logger.info({ port: PORT }, `FleetScheduler API listening on port ${PORT}`);
       });
