@@ -2,449 +2,279 @@
 
 **Analysis Date:** 2026-03-21
 
-## Backend (Node.js/Express)
-
-### Naming Patterns
+## Naming Patterns
 
 **Files:**
-- Controllers: PascalCase + `Controller` suffix → `authController.js`
-- Models: PascalCase → `Job.js`, `Vehicle.js`
-- Services: camelCase + `Service` suffix → `jobAssignmentService.js`
-- Routes: camelCase + plural nouns → `jobs.js`, `vehicles.js`
-- Middleware: camelCase → `authMiddleware.js`
-- Config: camelCase → `database.js`, `constants.js`
+- JavaScript backend: `camelCase` with `.js` extension (e.g., `authController.js`, `jobAssignmentService.js`)
+- Dart/Flutter: `snake_case` with `.dart` extension (e.g., `job_service.dart`, `create_job_screen.dart`)
+- Model classes: Capitalized singular nouns (e.g., `Job.js`, `Vehicle.js`)
+- Service classes: Capitalized with `Service` suffix (e.g., `JobAssignmentService`, `VehicleAvailabilityService`)
+- Configuration files: `camelCase` or `snake_case` (e.g., `database.js`, `app_config.dart`)
 
-**Functions:**
-- Controller/Service methods: camelCase → `login()`, `assignJobToVehicle()`, `getJobById()`
-- Private/Helper methods: camelCase prefixed with underscore → `_normaliseRole()`, `_fixDates()`, `_parseTechnicians()`
-- Async/await preferred throughout
+**Functions/Methods:**
+- JavaScript: `camelCase` for function names, `snake_case` for SQL parameters
+  - Private methods prefixed with underscore: `_normaliseRole()`, `_formatDateOnly()`
+  - Public static methods without underscore: `createJob()`, `getJobById()`
+- Dart: `camelCase` for all methods and functions
+  - Private methods prefixed with underscore: `_parseTechnicians()`, `_formatDate()`
+  - Future/async functions use `async`/`await` keywords
 
 **Variables:**
-- camelCase for local variables: `jobId`, `vehicleId`, `technicianIds`
-- UPPERCASE for constants: `JWT_SECRET`, `JWT_EXPIRES`, `PORT`
-- Prefix with underscore for private class fields: `_formatDateOnly()`
+- JavaScript: `camelCase` for local variables, objects, and constants in code
+  - Database fields use `snake_case` (e.g., `customer_name`, `scheduled_date`)
+  - Environment variables use `UPPER_SNAKE_CASE` (e.g., `JWT_SECRET`, `PORT`)
+- Dart: `camelCase` for all variables and instance members
+  - Constants defined with `const` keyword
+  - Nullable types marked with `?` (e.g., `String?`, `int?`)
 
-**Types/Objects:**
-- Database queries return destructured arrays: `const [rows] = await db.query()`
-- Standard response envelope: `{ success: boolean, data?: object, error?: string }`
-- Error objects include `.code` property for MySQL error handling
+**Types/Classes:**
+- JavaScript: `PascalCase` for class names (e.g., `Job`, `AuthController`)
+- Dart: `PascalCase` for classes and type names (e.g., `JobProvider`, `JobStatus`)
+- Dart enums: `PascalCase` for enum names, `camelCase` for values (e.g., `enum JobStatus { idle, loading, success, error }`)
 
-### Code Style
-
-**Formatting:**
-- 2-space indentation (observed throughout)
-- No automatic formatter configured
-- Comments use visual separators: `// ==========`, `// ──────`
-
-**Linting:**
-- Not configured (no .eslintrc found)
-- No pre-commit hooks enforced
-- Manual style consistency expected
-
-### Import Organization
-
-**Order:**
-1. Core Node.js modules (`require('dotenv')`, `require('express')`)
-2. Third-party packages (`require('cors')`, `require('bcryptjs')`)
-3. Local imports (`require('./config/database')`, `require('./routes')`)
-
-**Path Aliases:**
-- Not used; relative paths are standard
-- All imports are explicit relative paths: `require('../config/database')`
-
-**Example from `src/server.js`:**
-```javascript
-require('dotenv').config();
-const express = require('express');
-const cors    = require('cors');
-const bcrypt  = require('bcryptjs');
-const jwt     = require('jsonwebtoken');
-
-const db         = require('./config/database');
-const routes     = require('./routes');
-const swaggerUi  = require('swagger-ui-express');
-```
-
-### Error Handling
-
-**Patterns:**
-- Try-catch blocks for all async operations
-- Specific error type checking for database errors: `error.code === 'ER_DUP_ENTRY'`
-- Throw custom Error instances with descriptive messages
-- Log errors to console before responding: `console.error('Error in Job.createJob:', error)`
-- Never expose sensitive error details in production (check `NODE_ENV`)
-
-**Response Format:**
-```javascript
-// Success
-res.status(200).json({
-  success: true,
-  data: object,
-  message: 'Optional message'
-});
-
-// Error
-res.status(400).json({
-  success: false,
-  error: error.message,
-  message: 'User-friendly message'
-});
-```
-
-**Example from `src/models/Job.js` (createJob):**
-```javascript
-try {
-  // ... operation ...
-  return newJob;
-} catch (error) {
-  console.error('Error in Job.createJob:', error);
-
-  if (error.code === 'ER_DUP_ENTRY') {
-    throw new Error('Job number already exists (duplicate entry)');
-  }
-  if (error.code === 'ER_NO_REFERENCED_ROW_2') {
-    throw new Error('Invalid user ID - creator does not exist');
-  }
-  throw error;
-}
-```
-
-### Comments
-
-**When to Comment:**
-- Block separators for logical sections (visual clarity)
-- Explain "why" not "what" (code already shows what it does)
-- Document non-obvious transformations (e.g., timezone handling in Job model)
-- Mark temporary fixes with reason: `// MySQL 5.6 does not have JSON_ARRAYAGG`
-- Flag issues: `// ← NEW`, `// ← FIX`, `// ← TODO`
-
-**Format:**
-- Single-line comments for inline: `// comment`
-- Section headers with visual separators:
-  ```javascript
-  // ==========================================
-  // FUNCTION: createJob
-  // PURPOSE: Insert a new job
-  // RETURNS: Newly created job object
-  // ==========================================
-  ```
-
-**JSDoc/TSDoc:**
-- Used for public methods with `/**` blocks
-- Includes `@param` and `@returns` for clarity
-- Example from Job model:
-  ```javascript
-  /**
-   * Create a new job in the database
-   *
-   * @param {Object} jobData - Job information
-   * @param {string} jobData.customer_name - Customer name
-   * @returns {Promise<Object>} The newly created job
-   */
-  ```
-
-### Function Design
-
-**Size:**
-- Generally 50-200 lines (observed in Job.js model)
-- Longer functions have clear subsections marked with comments
-- Helper functions extracted for reusable logic
-
-**Parameters:**
-- Single objects preferred for multiple related parameters: `jobData` object passed instead of 5+ individual args
-- Destructuring used in function signature: `const { username, password } = req.body`
-- Optional params get default values: `statusFilter = null`, `excludeStatuses = []`
-
-**Return Values:**
-- Async functions always return Promises
-- Null returned for "not found" cases: `return null`
-- Objects returned with all fields populated (not partial)
-- Models return raw database results, services/controllers apply formatting
-
-**Example from Job model:**
-```javascript
-static async getJobById(id) {
-  try {
-    const sql = `SELECT ... WHERE j.id = ?`;
-    const [rows] = await db.query(sql, [id]);
-    const fixed = Job._parseTechnicians(Job._fixDates(rows));
-    return fixed[0] || null;  // ← null if not found
-  } catch (error) {
-    console.error('Error in Job.getJobById:', error);
-    throw error;  // ← propagate error
-  }
-}
-```
-
-### Module Design
-
-**Exports:**
-- Single class export per model file: `module.exports = Job;`
-- Multiple exports from middleware: `module.exports = { verifyToken, requireRole, requirePermission };`
-- Routes export router: `module.exports = router;`
-
-**Barrel Files:**
-- Not used; `routes/index.js` imports and re-exports route files
-- No centralized barrel pattern for models or services
-
-**File Structure - Backend:**
-```
-vehicle-scheduling-backend/
-├── src/
-│   ├── config/           # Configuration files (db, constants, swagger)
-│   ├── controllers/      # Request handlers (legacy, mostly inline in routes)
-│   ├── middleware/       # Express middleware (auth, validation)
-│   ├── models/           # Database models (Job.js, Vehicle.js)
-│   ├── routes/           # Express route definitions
-│   ├── services/         # Business logic services
-│   └── server.js         # Entry point
-├── scripts/              # Utilities (seedPasswords.js)
-├── package.json
-└── .env
-```
-
----
-
-## Frontend (Flutter/Dart)
-
-### Naming Patterns
-
-**Files:**
-- Screens: snake_case + `_screen` suffix → `create_job_screen.dart`, `job_detail_screen.dart`
-- Models: snake_case → `job.dart`, `user.dart`, `vehicle.dart`
-- Providers: snake_case + `_provider` suffix → `job_provider.dart`, `auth_provider.dart`
-- Services: snake_case + `_service` suffix → `job_service.dart`, `user_service.dart`
-- Widgets: snake_case in directory → `lib/widgets/common/location_picker_popup.dart`
-
-**Classes:**
-- PascalCase: `Job`, `JobTechnician`, `CreateJobScreen`, `JobProvider`
-- Enums: PascalCase → `JobStatus` (with lowercase values: `idle`, `loading`, `success`)
-- Private classes: prefix with underscore → `_CreateJobScreenState`, `_SummaryRow`
-
-**Variables/Properties:**
-- camelCase for all variables: `jobId`, `vehicleId`, `customerName`
-- Private fields: prefix with underscore → `_selectedJob`, `_jobService`, `_formKey`
-- Final constants: camelCase with `const` → `const minDuration = 15;`
-
-### Code Style
+## Code Style
 
 **Formatting:**
-- 2-space indentation (observed in pubspec.yaml and source files)
-- Analysis options: `package:flutter_lints/flutter.yaml` enabled
-- Comments can use `// ignore: lint_name` to suppress specific rules
+- JavaScript: No explicit formatter configured (Prettier not in devDependencies)
+- Dart: Flutter built-in formatter via `dart format`
+- 2-space indentation used throughout (JavaScript)
+- 2-space indentation used throughout (Dart)
+- Multi-line comments use `/* */` block format for file headers
+- Single-line comments use `//` with space
 
 **Linting:**
-- Flutter lints configured via `analysis_options.yaml`
-- Run with: `flutter analyze`
-- Recommended rules enabled by default
-- No custom rule overrides in codebase
+- JavaScript: No ESLint configuration detected in project
+- Dart: `flutter_lints` v5.0.0 configured with analysis_options.yaml
+- Manual code review and static analysis via IDE
 
-### Import Organization
+**File Header Pattern:**
+Every significant file starts with a header comment block:
+```javascript
+// ============================================
+// FILE: src/models/Job.js
+// PURPOSE: [What the file does]
+// LAYER: [Layer designation like "Data Layer", "Service Layer"]
+// ============================================
+```
 
-**Order:**
-1. Dart core imports: `import 'package:flutter/material.dart';`
-2. Package imports: `import 'package:provider/provider.dart';`
-3. Relative imports: `import '../models/job.dart';`
+**Decorative Separators:**
+- Section headers use `// ==========...` lines for visual separation
+- Subsection headers use `// ──────...` for lighter separation
+- Helps navigate large files visually
 
-**Package Paths:**
-- Absolute paths used for local imports: `import 'package:vehicle_scheduling_app/models/job.dart';`
-- Not relative paths like `import '../models/job.dart';`
+## Import Organization
 
-**Example from CreateJobScreen:**
+**Order (JavaScript):**
+1. Core Node.js modules (no imports needed)
+2. Third-party dependencies (express, bcrypt, jwt, etc.)
+3. Local config imports (database, constants)
+4. Local models/services (relative imports with `require`)
+5. Middleware (authMiddleware)
+
+Example from `src/controllers/authController.js`:
+```javascript
+const db       = require('../config/database');
+const bcrypt   = require('bcryptjs');
+const jwt      = require('jsonwebtoken');
+const { USER_ROLE } = require('../config/constants');
+```
+
+**Order (Dart/Flutter):**
+1. Core Flutter/Dart imports (`package:flutter/...`)
+2. Package imports (`package:provider/...`, `package:google_maps_flutter/...`)
+3. Local imports (relative `package:vehicle_scheduling_app/...`)
+
+Example from `lib/providers/job_provider.dart`:
 ```dart
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:vehicle_scheduling_app/config/app_config.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:vehicle_scheduling_app/models/job.dart';
-import 'package:vehicle_scheduling_app/providers/job_provider.dart';
+import 'package:vehicle_scheduling_app/services/job_service.dart';
 ```
 
-### Error Handling
+**Path Aliases:**
+- No path aliases configured in either backend or frontend
+- All imports are relative (`../`) or absolute package-based
+
+## Error Handling
+
+**JavaScript/Express:**
+- All routes wrapped in try-catch blocks
+- Errors logged to console with descriptive message: `console.error('Error in Job.createJob:', error);`
+- Errors re-thrown after logging to propagate to global error handler
+- Specific MySQL error codes checked: `error.code === 'ER_DUP_ENTRY'`, `'ER_NO_REFERENCED_ROW_2'`
+- Global error handler at `app.use((err, req, res, next) => {...})` in `src/server.js`
+- HTTP status codes explicitly set: `res.status(400).json()`, `res.status(401).json()`, etc.
+- Error responses follow pattern: `{ success: false, message: '...', error: '...' }`
+
+**Dart/Flutter:**
+- Service methods use try-catch with `rethrow` to propagate errors to caller
+- Console logging with `print()` for error messages: `print('JobService.getAllJobs error: $e');`
+- Provider methods catch errors and set `_status = JobStatus.error` and `_error = e.toString()`
+- Error messages passed through `_error` state variable to UI
+- Toast notifications used for user-facing error display
+
+**Transaction Error Handling (JavaScript):**
+- Database transactions explicitly managed: `await conn.beginTransaction()` / `await conn.commit()` / `await conn.rollback()`
+- Errors in transaction block trigger automatic `rollback()` in catch handler
+- Connection always released in finally block: `conn.release()`
+
+## Logging
+
+**Framework:** `console` in JavaScript, `print()` in Dart (no dedicated logging library)
 
 **Patterns:**
-- Try-catch blocks for async operations
-- Error messages displayed via `Fluttertoast.showToast()`
-- Status enums track operation state: `JobStatus { idle, loading, success, error }`
-- Null-safe optional fields: `Job? selectedJob`, `int? vehicleId`
 
-**Response Handling:**
-- Check success flag before using data: `if (response['success'] == true) { ... }`
-- Store error in provider state: `_error = e.toString()`
-- Notify listeners after error: `notifyListeners()`
+JavaScript:
+- Informational: `console.log('✅ Database connection successful');`
+- Errors: `console.error('Error in Job.createJob:', error);`
+- Warnings: `console.warn('⚠️ Unknown permission key: "${permission}"');`
+- Decorative progress logging in assignment flow: `console.log('═══════════════════════════════════════════════════════');`
 
-**Example from JobProvider:**
-```dart
-Future<Job?> createJob({...}) async {
-  _status = JobStatus.loading;
-  _error = null;
-  notifyListeners();
+Dart:
+- Errors: `print('JobService.getAllJobs error: $e');`
+- Debug info: `print('Job created successfully');`
+- Uses string interpolation: `print('Job #$jobId created');`
 
-  try {
-    final newJob = await _jobService.createJob(...);
-    _status = JobStatus.success;
-    return newJob;
-  } catch (e) {
-    _error = e.toString();
-    _status = JobStatus.error;
-    notifyListeners();
-    return null;
-  }
-}
-```
+**When to Log:**
+- Errors: Always log with full context (`Error in [Function]: [message]`)
+- Database operations: Log at start and completion of major operations
+- Authentication: Log login attempts and token verification failures
+- API transitions: Log step-by-step progress in multi-step operations (see `jobAssignmentService.js`)
 
-### Comments
+## Comments
 
 **When to Comment:**
-- Block headers explaining complex logic flows
-- "Why" comments for non-obvious decisions
-- Mark fixes and changes: `// FIX (Bug 1):`, `// NEW`, `// CHANGED`
+- File headers: Mandatory for every source file (explain purpose and layer)
+- Complex business logic: Comment the "why" not the "what"
+- Database compatibility notes: Explain workarounds for specific DB versions (MySQL 5.6 vs 8.0)
+- Breaking changes or fixes: Document BUG fixes with comments explaining the issue and solution
+- Regex patterns: Document what regex validates (e.g., `PHONE_REGEX: /^[\d\s\-\+\(\)]+$/` for phone numbers)
 
-**Format:**
-- Block comments for sections:
-  ```dart
-  // ==========================================
-  // FIX (Bug 1): Driver assignment now works...
-  // ==========================================
-  ```
-- Inline comments for context: `// ← NEW`, `// ← for backwards-compat`
+**JSDoc/TSDoc:**
+- Public methods documented with JSDoc blocks (see `src/models/Job.js` line 118-135)
+- Parameter types documented: `@param {string} date - Date in 'YYYY-MM-DD' format`
+- Return types documented: `@returns {Promise<Object>} Updated job object`
+- Exception behavior documented: describes what errors might be thrown
+- Not used on private methods (prefixed with `_`)
 
-**Documentation:**
-- JSDoc-style rarely used in Dart
-- Prefer clear code over comments
-- Comments explain design decisions, not implementation
+Example from `src/models/Job.js`:
+```javascript
+/**
+ * Create a new job in the database
+ *
+ * @param {Object} jobData - Job information
+ * @param {string} jobData.customer_name - Customer name
+ * @returns {Promise<Object>} The newly created job with auto-generated fields
+ */
+```
 
-### Function/Method Design
+**Dart Documentation:**
+- Class documentation above class definition: `/// A lightweight model for a technician...`
+- Method documentation above method signature
+- Less formal than JavaScript JSDoc, more focused on intent
+
+## Function Design
 
 **Size:**
-- Methods 30-100 lines typical
-- Large methods broken into helper functions or state management chunks
-- Build methods can be longer but usually factored out to smaller widgets
+- Average function length 30-50 lines (small focused functions)
+- Largest functions are complex query builders with explicit comments (e.g., `Job.getJobsByDate` is 57 lines due to SQL)
+- Helper functions extracted for reuse: `_formatDateOnly()`, `_parseTechnicians()`, `_fixDates()`
 
 **Parameters:**
-- Named parameters preferred: `method({required int id, String? filter})`
-- Required parameters marked with `required`
-- Optional parameters with defaults: `int limit = 10`
+- Maximum 5-6 parameters before using object destructuring
+- Destructuring used extensively: `const { job_id, vehicle_id, driver_id = null, technician_ids = [] } = assignmentData;`
+- Default values provided in destructuring for optional fields
 
 **Return Values:**
-- Futures for async: `Future<Job?>`, `Future<void>`
-- Nullable returns for optional results: `Job?`
-- Future lists: `Future<List<Job>>`
+- Explicit return type documentation in JSDoc
+- `null` returned when resource not found (e.g., `Job.getJobById()` returns `null`)
+- Arrays returned (never `undefined`) - empty array `[]` for "no results"
+- Boolean status only in simple cases; object with `{ success, message }` preferred for complex operations
 
-**Null Safety:**
-- Non-nullable by default: `int jobId`
-- Nullable explicitly: `int? vehicleId`
-- Null coalescing: `value ?? defaultValue`
-- Bang operator only when certain: `value!`
+**Async/Await:**
+- All database operations marked `async`
+- Routes always use `async (req, res) => { ... }`
+- Service methods marked `async` when calling database methods
+- Errors propagate via thrown exceptions, not error callbacks
 
-**Example from JobProvider:**
-```dart
-Future<void> loadJobById(int id) async {  // ← Future<void> for side effects
-  _status = JobStatus.loading;
-  _error = null;
-  notifyListeners();
-
-  try {
-    _selectedJob = await _jobService.getJobById(id);  // ← null safe assignment
-    _status = JobStatus.success;
-  } catch (e) {
-    _error = e.toString();
-    _status = JobStatus.error;
-  }
-  notifyListeners();
-}
-```
-
-### Module Design
+## Module Design
 
 **Exports:**
-- Single class per file: each screen, model, provider in own file
-- Re-export common utilities from shared files
-- No barrel files pattern used
+- JavaScript: Single class export via `module.exports = ClassName` (one per file)
+- Middleware files export multiple named exports: `module.exports = { verifyToken, requireRole, adminOnly }`
+- Configuration files export single object: `module.exports = { ...constants }`
+- Dart: Each file typically contains one or two related classes
 
-**Providers Pattern:**
-- Each feature has dedicated provider: `JobProvider`, `VehicleProvider`, `AuthProvider`
-- ChangeNotifier for state management
-- Getters expose immutable state: `List<Job> get jobs => _filteredJobs;`
-- Private state with underscore prefix: `List<Job> _jobs = []`
+**Barrel Files:**
+- Not used in this codebase
+- Each module imported directly from its file path
+- No index.js re-exports for convenience
 
-**Widget Hierarchy:**
-- Screens are StatefulWidget or Consumer wrappers
-- Reusable components extracted to `lib/widgets/`
-- Private state classes for StatefulWidgets: `_CreateJobScreenState`
+**Layer Separation:**
+Clear 3-layer architecture with no circular dependencies:
 
-**File Structure - Frontend:**
-```
-vehicle_scheduling_app/
-├── lib/
-│   ├── config/               # App configuration, theme
-│   ├── models/               # Data models (job.dart, user.dart)
-│   ├── providers/            # State management (job_provider.dart)
-│   ├── screens/              # Full-page widgets
-│   │   └── jobs/             # Job-related screens
-│   ├── services/             # API calls (job_service.dart)
-│   ├── widgets/
-│   │   └── common/           # Reusable components
-│   ├── main.dart             # Entry point
-│   └── config/app_config.dart # API base URL, constants
-├── assets/
-│   ├── images/
-│   └── icon/
-├── pubspec.yaml
-└── analysis_options.yaml
-```
+1. **Models** (`src/models/`): Database operations only
+   - One class per file (Job.js, Vehicle.js)
+   - Static methods for all operations
+   - No business logic, just SQL + response mapping
 
----
+2. **Services** (`src/services/`): Business logic and orchestration
+   - Calls models for data, adds validation/conflict checking
+   - Coordinates between multiple models if needed
+   - Returns processed data ready for API response
 
-## Cross-Layer Patterns
+3. **Routes** (`src/routes/`): HTTP layer
+   - Calls services to perform operations
+   - Validates inputs and request format
+   - Handles HTTP status codes and error responses
+   - Extracts path parameters and query strings
 
-### Data Flow
+**Controller Pattern (Partial):**
+- `src/controllers/` exists but infrequently used
+- Most logic is in Services, not Controllers
+- Controllers (like `authController.js`) contain public static methods called from `src/server.js`
 
-**Backend Request/Response:**
-1. Route receives request + verifies token middleware
-2. Controller/Service handles business logic
-3. Model executes database operation
-4. Response wrapped in standard envelope
-5. HTTP status codes follow REST conventions
+## Code Organization Patterns
 
-**Frontend Data Flow:**
-1. Service makes HTTP call to backend
-2. Provider receives result, updates state
-3. Screen listens to provider changes
-4. Widget rebuilds with new data
+**Defensive Programming:**
+- Null checks on returned objects: `if (!job) { throw new Error(...) }`
+- Array bounds checking: `if (rows.length === 0) { ... }`
+- Explicit validation of IDs: `if (isNaN(jobId)) { return res.status(400)... }`
+- Type coercion helpers: `_parseInt()`, `_parseDouble()` for safe type conversion in Dart
 
-### Field Naming Alignment
+**Data Format Consistency:**
+- Dates always formatted as `YYYY-MM-DD` strings before JSON response (see `Job._formatDateOnly()`)
+- JavaScript Date objects converted to strings on server to prevent UTC timezone shifts
+- Nullable fields explicitly typed in Dart (`String?`, `int?`)
 
-**API vs Flutter:**
-- Snake_case in API responses: `customer_name`, `scheduled_date`, `job_id`
-- Converted to camelCase in Dart models: `customerName`, `scheduledDate`, `jobId`
-- Safe converters handle both old and new field names for compatibility
+**Configuration Centralization:**
+- `src/config/constants.js` contains all enums and validation rules
+- `src/config/database.js` exports single pool instance used everywhere
+- `lib/config/app_config.dart` holds API endpoint URLs
+- Environment variables loaded once at startup
 
-**Example from Job model (Dart):**
-```dart
-factory JobTechnician.fromJson(Map<String, dynamic> json) {
-  return JobTechnician(
-    id: _parseInt(json['id']),
-    fullName: (json['full_name'] ?? json['fullName'] ?? '').toString(),  // ← handles both
-  );
+## API Response Format
+
+All success responses follow pattern:
+```javascript
+{
+  success: true,
+  [data_key]: [data],
+  count: [optional array length]
 }
 ```
 
-### Database Timezone Handling
-
-**Issue:** MySQL DATE columns shift by timezone when serialized to ISO format
-
-**Solution in Backend (`src/models/Job.js`):**
+All error responses follow pattern:
 ```javascript
-// Use LOCAL year/month/day — NOT getUTCFullYear — to preserve the date
-const y   = d.getFullYear();
-const m   = String(d.getMonth() + 1).padStart(2, '0');
-const day = String(d.getDate()).padStart(2, '0');
-return `${y}-${m}-${day}`;  // Always 'YYYY-MM-DD' format
+{
+  success: false,
+  message: "User-friendly error message",
+  error: "Technical error details (dev only)"
+}
 ```
 
-**Applied on:** Every query that returns scheduled_date
-- Model methods call `Job._fixDates()` before returning
-- Result is plain string, never JavaScript Date object
+Status codes always explicit: 200, 400, 401, 403, 404, 409, 500
 
 ---
 

@@ -4,473 +4,240 @@
 
 ## Tech Debt
 
-### 1. Excessive Console Logging in Production Code
+**Driver Conflict Resolution — Complex Multi-Path Logic:**
+- Issue: Job assignment conflict detection is split across multiple layers (service, model, route) with overlapping responsibility. The `assignTechnicians()` method exists in three places with similar but slightly different implementations, creating maintenance confusion.
+- Files: `vehicle-scheduling-backend/src/services/jobAssignmentService.js` (lines 295-369), `vehicle-scheduling-backend/src/models/Job.js` (lines 661-704), `vehicle-scheduling-backend/src/routes/jobs.js` (lines 144-219)
+- Impact: Bug fixes must be applied to multiple locations. Admin override logic (Bug 3) required changes in 3 files. Future driver scheduling features will require careful coordination across layers.
+- Fix approach: Consolidate conflict detection into a single authoritative service method. Remove duplicate implementations in the model. The route layer should only deserialize input and call the service.
 
-**Issue:** Backend code contains 254 console.log/console.error statements throughout production code paths.
+**Console.log Logging Throughout Backend:**
+- Issue: All console.log statements in production code create noisy logs and no structured logging format (severity levels, timestamps, request IDs for tracing).
+- Files: `vehicle-scheduling-backend/src/services/jobAssignmentService.js` (54+), `vehicle-scheduling-backend/src/services/jobStatusService.js`, `vehicle-scheduling-backend/src/models/Job.js`
+- Impact: Log rotation/management is not configured. Large production runs will generate unmanageable log files. No ability to filter by severity or trace a request across multiple operations. Debugging production issues is difficult.
+- Fix approach: Replace console.log with a proper logging library (Winston or Pino). Add severity levels (debug, info, warn, error). Include request context (jobId, userId) in all logs.
 
-**Files:** `vehicle-scheduling-backend/src/**/*.js` (particularly `src/services/jobAssignmentService.js`, `src/models/Job.js`)
+**Print Statements in Flutter Services:**
+- Issue: Flutter code uses `print()` for debugging instead of structured logging or error tracking.
+- Files: `vehicle_scheduling_app/lib/services/api_service.dart` (58, 77, 100, 120), `vehicle_scheduling_app/lib/services/job_service.dart` (48+), `vehicle_scheduling_app/lib/services/vehicle_service.dart`
+- Impact: In production, debug prints are often suppressed or lost. No error tracking service (Sentry, Firebase Crashlytics) to capture real crashes.
+- Fix approach: Implement error reporting via Firebase Crashlytics or similar. Use a proper logging pattern. Remove all print() statements in favor of structured logs.
 
-**Impact:** Console logs pollute production logs and impact performance. In high-concurrency scenarios, logging overhead becomes measurable. No log levels (info, warn, error) are used—all statements are at the same level, making it impossible to filter logs by severity.
+**Timezone Date Handling — Manual String Conversion:**
+- Issue: MySQL DATE columns are converted manually to 'YYYY-MM-DD' strings to work around timezone shift issues (`Job._formatDateOnly()` in `vehicle-scheduling-backend/src/models/Job.js` lines 19-47). This is a workaround, not a solution.
+- Files: `vehicle-scheduling-backend/src/models/Job.js` (lines 18-65), `vehicle_scheduling_app/lib/services/job_service.dart` (lines 25-30)
+- Impact: If timezone configuration changes on the server or client, dates will shift unexpectedly. Flutter date parsing uses local timezone; backend uses server timezone. Inconsistency is fragile.
+- Fix approach: Standardize on UTC everywhere. Store dates as UTC in database, parse as UTC in Node, convert to local time ONLY in Flutter UI layer. Add comprehensive timezone tests.
 
-**Fix approach:**
-- Implement structured logging using a library like `winston` or `pino`
-- Replace console.log calls with proper debug/info/warn/error levels
-- Add log level configuration via environment variable (DEBUG, INFO, WARN, ERROR)
-- Remove noisy debug logs (e.g., step-by-step logging in jobAssignmentService.js lines 54-286)
-- Keep only essential error logs for production troubleshooting
-
----
-
-### 2. Multiple Database Drivers Installed (Dead Code)
-
-**Issue:** Both `mysql` (v2.18.1) and `mysql2` (v3.16.3) are installed in dependencies.
-
-**Files:** `vehicle-scheduling-backend/package.json`
-
-**Impact:** Only `mysql2` is actively used (`src/config/database.js` requires `mysql2/promise`). The legacy `mysql` package should not be included, adding unnecessary ~2MB to deployment bundle.
-
-**Fix approach:**
-- Remove `mysql` from package.json dependencies
-- Run `npm install` to update package-lock.json
-- Verify all database calls use `mysql2` (already confirmed)
-- Update Dockerfile if base image layer is cached
-
----
-
-### 3. MySQL 5.6 Compatibility Workarounds Baked In
-
-**Issue:** Code contains fallback logic for MySQL 5.6 (GROUP_CONCAT instead of JSON_ARRAYAGG) despite schema being MySQL 8.0+.
-
-**Files:** `vehicle-scheduling-backend/src/models/Job.js` lines 67-111 (technician parsing logic)
-
-**Impact:** Adds unnecessary complexity to data parsing. The system supports MariaDB 10.4.32 per SQL dump, which supports JSON_ARRAYAGG, but code still handles GROUP_CONCAT format "1|Alice,2|Bob" with fallback parsing.
-
-**Fix approach:**
-- Migrate all queries to use `JSON_ARRAYAGG(JSON_OBJECT(...))` syntax
-- Remove GROUP_CONCAT fallback parsing (`_parseTechnicians()` logic)
-- Update Job model to return native JSON arrays from database
-- Simplifies Flutter parsing since it will always receive standard arrays
-- Target: Next major version bump
-
----
+**Input Validation — Minimal at Route Level:**
+- Issue: Most route handlers (jobs.js, vehicles.js) validate only required fields and date format. No validation for negative numbers, string length limits, or enum bounds before database insert.
+- Files: `vehicle-scheduling-backend/src/routes/jobs.js` (lines 246-259), `vehicle-scheduling-backend/src/routes/vehicles.js`
+- Impact: Malformed data can be written to database. Example: negative estimated_duration_minutes, job_number longer than 50 chars, customer_name with SQL injection attempts (though parametrized queries provide some protection).
+- Fix approach: Add a validation middleware or schema validator (Joi, Yup). Validate all inputs before business logic touches them.
 
 ## Known Bugs
 
-### 1. Race Condition in Dashboard Loading (Technician View)
+**BUG 1 — Dashboard Stat Card Miscount (FIXED but watch for regression):**
+- Symptoms: "Pending" stat card counted both 'pending' and 'assigned' jobs. User sees "3 Pending" but list shows 0 pending jobs.
+- Files: `vehicle_scheduling_app/lib/screens/dashboard/dashboard_screen.dart` (BUG comments lines 7-16)
+- Trigger: Any technician with assigned jobs opens dashboard. The filter logic used `status.toLowerCase().contains('pending')` which matched both 'pending' and 'assigned'.
+- Workaround: None in old code. Fixed in current version by splitting into separate "Pending" and "Assigned" cards.
+- Current Status: Fixed in lines 1-35, but similar pattern may exist in other stat calculations. Search for contains() on status fields.
 
-**Symptoms:** When a technician opens the dashboard, loading spinners may show inconsistently. If dashboard refresh and job status update occur simultaneously, UI may flicker or show stale counts.
+**BUG 2 — False Error After Driver Assignment (FIXED):**
+- Symptoms: Driver assignment succeeds (backend saves to DB, returns 200). Flutter shows error snackbar: "TypeError: cast to Map failed". User thinks assignment failed, but driver was actually assigned.
+- Files: `vehicle_scheduling_app/lib/services/api_service.dart` (Bug 2 fixed lines 1-20), `vehicle_scheduling_app/lib/screens/jobs/job_detail_screen.dart` (lines 6-16)
+- Trigger: Backend response is valid JSON but not a Map<String, dynamic> (e.g., empty response, JSON array, or null). The old code did `jsonDecode(body) as Map` which throws TypeError.
+- Workaround: Retry the assignment; it's already saved to DB.
+- Current Status: Fixed in api_service.dart by checking decoded type and wrapping non-Map responses. Watch for similar casting issues in other services.
 
-**Files:**
-- `vehicle_scheduling_app/lib/screens/dashboard/dashboard_screen.dart` lines 28-30
-- `vehicle_scheduling_app/lib/providers/job_provider.dart` lines 5-20
-
-**Trigger:** Rapid navigation to dashboard immediately after job status change, or technician clicking refresh while a background job update is in flight.
-
-**Workaround:** Refresh the screen manually; UI will eventually settle to correct state within 2-3 seconds.
-
-**Root cause:** `_loadDashboard()` for technicians lacks try/catch error handling. If any provider fails to load (JobProvider.isLoading still true while VehicleProvider.isLoading is false), the loading state becomes inconsistent. Additionally, the dashboard checks `jobProvider.isLoading || vehProvider.isLoading`, which doesn't account for partial failure states.
-
----
-
-### 2. Job Status Update False Failure Messages
-
-**Symptoms:** After assigning a driver to a job from the detail screen, user sees error snackbar "Assignment failed" even though the driver WAS successfully assigned in the backend.
-
-**Files:**
-- `vehicle_scheduling_app/lib/screens/jobs/job_detail_screen.dart` lines 6-16
-- `vehicle_scheduling_app/lib/services/api_service.dart` lines 4-20
-
-**Trigger:** Assign driver from job detail screen; check server logs to confirm assignment succeeded, but Flutter shows error toast.
-
-**Workaround:** Dismiss the error and refresh the job detail—the driver assignment persists.
-
-**Root cause:** Two-layer issue:
-1. Old code called `assignTechnicians()` then immediately called `loadJobById()` again. The provider's `assignTechnicians()` already internally calls `_reloadSingleJob()`, so the redundant load created race conditions.
-2. `ApiService._handleResponse()` threw TypeError when backend returned valid JSON that wasn't a Map (e.g., plain array). Even though the assignment succeeded server-side, Flutter caught the TypeError and reported failure.
-
-**Fix status:** Both issues have been patched in current codebase (see comments in job_detail_screen.dart and api_service.dart). Verify in testing.
-
----
-
-### 3. Admin Override Feature Was Non-Functional (Now Fixed)
-
-**Symptoms:** Admin selects "Force Override" when assigning a driver already booked on another overlapping job. Backend still rejects with 409 Conflict error instead of force-moving the driver.
-
-**Files:**
-- `vehicle-scheduling-backend/src/routes/jobs.js` lines 151-197
-- `vehicle-scheduling-backend/src/services/jobAssignmentService.js` lines 301-350
-- `vehicle_scheduling_app/lib/screens/jobs/job_detail_screen.dart` lines 18-28
-
-**Trigger:** As admin, open job detail, click "Manage Drivers", select a technician who is assigned to a conflicting job during the same time window, check "Force Override" checkbox, confirm.
-
-**Workaround:** Manually remove the driver from the conflicting job first, then assign them to the target job.
-
-**Root cause:** The force_override flag was being sent by Flutter but never read by the backend route handler. Route handler always called conflict checking without checking the flag first.
-
-**Fix status:** Fixed in current codebase. Route handler now reads `force_override` from request body (line 159 of jobs.js) and passes it to `JobAssignmentService.assignTechnicians()` (line 197). Service layer checks the flag before running conflict validation.
-
----
+**BUG 3 — Admin Override Flag Ignored (FIXED):**
+- Symptoms: Admin selects a driver already assigned to another job. Checks "Override" checkbox. Clicks "Assign". Request returns conflict error. Driver does not move.
+- Files: `vehicle-scheduling-backend/src/services/jobAssignmentService.js` (lines 301-368), `vehicle_scheduling_app/lib/services/job_service.dart` (lines 262-300), `vehicle-scheduling-backend/src/routes/jobs.js` (lines 151-219)
+- Trigger: Admin is editing a job, opens "Manage Drivers" dialog, selects a busy driver, checks override box, saves.
+- Root cause: The override flag was never threaded from Flutter UI → JobService → backend route → business logic. Route layer read `force_override` from body but never passed it to the service.
+- Current Status: Fixed. forceOverride now flows through entire stack. The service checks for admin role AND the flag before calling removeDriversFromConflictingJobs().
+- Watch for: Similar flag-threading issues if new admin override features are added.
 
 ## Security Considerations
 
-### 1. JWT Secret Hardcoded with Weak Default
+**JWT Secret in Environment Variable with Fallback:**
+- Risk: If JWT_SECRET env var is not set, code falls back to hardcoded string 'vehicle_scheduling_secret_2024'.
+- Files: `vehicle-scheduling-backend/src/middleware/authMiddleware.js` (line 9)
+- Current mitigation: In production, JWT_SECRET should be set. But no validation ensures it is set.
+- Recommendations: On server startup, throw an error if JWT_SECRET is not configured. Never hardcode a fallback in production code. Add an environment check in `server.js` startup.
 
-**Risk:** If `.env` file is missing or incomplete, system falls back to hardcoded JWT secret `'vehicle_scheduling_secret_2024'`.
+**No Rate Limiting on Authentication Endpoints:**
+- Risk: No protection against brute-force password or token attacks.
+- Files: `vehicle-scheduling-backend/src/routes/authRoutes.js` (no rate limiting middleware)
+- Current mitigation: JWT verification fails on invalid tokens, but no exponential backoff or account lockout.
+- Recommendations: Add rate-limiting middleware (express-rate-limit) to login/register endpoints. Implement account lockout after N failed attempts.
 
-**Files:** `vehicle-scheduling-backend/src/controllers/authController.js` line 16
+**No Input Sanitization for User-Provided Text:**
+- Risk: Customer names, addresses, descriptions are inserted into database without sanitization. While parametrized queries prevent SQL injection, XSS attacks are possible if data is rendered in a web dashboard without escaping.
+- Files: All job/vehicle create/update routes in `vehicle-scheduling-backend/src/routes/`
+- Current mitigation: Parametrized queries provide SQL injection protection. Flutter UI renders with Flutter widgets (type-safe, not HTML).
+- Recommendations: Add input sanitization (trim, length limits, character restrictions) at route validation layer. If a web admin dashboard is added, implement output escaping.
 
-**Current mitigation:** `.env` file exists in deployment but is not committed. However, if `.env` is lost or new developer forgets to create it, tokens become predictable.
+**Role-Based Access Control Not Complete:**
+- Risk: Some routes check `req.user.role` manually instead of using the `requireRole()` middleware. Inconsistency increases risk of oversight.
+- Files: `vehicle-scheduling-backend/src/routes/jobs.js` (line 40: manual `if (req.user.role === 'technician')`), `vehicle-scheduling-backend/src/routes/jobAssignmentRoutes.js` (manual role checks)
+- Current mitigation: requireRole() middleware exists but is not universally applied. Manual checks are correctly implemented but fragile.
+- Recommendations: Enforce requireRole() middleware on ALL routes that require a specific role. Create a linting rule or code review checklist to catch manual role checks.
 
-**Recommendations:**
-- Make JWT_SECRET required at startup; throw error if missing
-- Generate a random secret on first run if none provided (write to .env.local)
-- Add validation check in server.js entry point:
-  ```javascript
-  if (!process.env.JWT_SECRET) {
-    throw new Error('JWT_SECRET environment variable is required');
-  }
-  ```
-- Document .env setup in README
-
----
-
-### 2. Password Hashing Uses bcryptjs (Works but Deprecated)
-
-**Risk:** bcryptjs is a pure JavaScript implementation of bcrypt, slower than native bcrypt. Though secure, bcryptjs version 3.0.3 is relatively new and less battle-tested. Additionally, package.json has BOTH bcrypt (6.0.0) and bcryptjs (3.0.3) installed but only bcryptjs is used.
-
-**Files:**
-- `vehicle-scheduling-backend/package.json` lines 15-16 (bcrypt and bcryptjs both installed)
-- `vehicle-scheduling-backend/src/controllers/authController.js` line 12 (uses bcryptjs only)
-
-**Current mitigation:** bcryptjs salt round is 10 (acceptable; industry standard is 10-12). Passwords hashed before storage.
-
-**Recommendations:**
-- Remove bcrypt from dependencies; keep only bcryptjs
-- Add explicit note in code: `bcryptjs is pure JS impl. For high-volume auth, consider migrating to native bcrypt on Linux/Mac servers`
-
----
-
-### 3. CORS Allows All Localhost Ports
-
-**Risk:** While developer-friendly for local debugging, CORS policy is overly permissive in development.
-
-**Files:** `vehicle-scheduling-backend/src/server.js` (CORS configuration not explicitly shown but mentioned in TECHNICAL_ARCHITECTURE.md line 23)
-
-**Current mitigation:** Only applies to localhost/127.0.0.1. Production should have strict origin whitelist.
-
-**Recommendations:**
-- Verify CORS config changes for production deployment
-- Document required CORS origins for staging vs production
-- Use environment variable to control allowed origins (not hardcoded regex)
-
----
-
-### 4. No Input Validation Middleware
-
-**Risk:** While individual controllers perform some validation (e.g., `isNaN()` checks), there is no centralized validation schema or middleware.
-
-**Files:** `vehicle-scheduling-backend/src/routes/` (all route files)
-
-**Impact:** Request body validation scattered across controllers. Easy to miss edge cases (negative numbers, oversized strings, malformed JSON arrays). If a new endpoint is added, developer must remember to validate all fields.
-
-**Recommendations:**
-- Implement schema validation using `joi` or `zod`
-- Create validation middleware for common patterns (job creation, assignment, etc.)
-- Apply middleware at route definition level:
-  ```javascript
-  router.post('/', validateJobCreation, jobController.create);
-  ```
-
----
+**Technician Access to Jobs Not Restricted by Job Details:**
+- Risk: Technician can view any job they are assigned to via GET /api/jobs/:id (lines 95-109 in jobs.js). This is correct. However, there is no check that the assignment actually exists in the database — only in the technicians_json array. If the array is corrupted or out of sync, a technician could see a job they should not.
+- Files: `vehicle-scheduling-backend/src/routes/jobs.js` (lines 93-109)
+- Current mitigation: The check uses the technicians_json array which comes from job_technicians table. This is the source of truth.
+- Recommendations: Add a redundant check: `WHERE job_id = ? AND user_id = ?` against the job_technicians table directly, not derived arrays.
 
 ## Performance Bottlenecks
 
-### 1. Database Lock Contention on High-Concurrency Job Assignments
+**N+1 Query Pattern in Job Listing:**
+- Problem: When fetching all jobs with technicians, the query includes a GROUP_CONCAT subquery for each row. If there are 1000 jobs, 1000 subqueries run.
+- Files: `vehicle-scheduling-backend/src/models/Job.js` (lines 104-111, used in getAllJobs, getJobsByDate, getJobsByVehicle, getJobsByTechnician)
+- Cause: GROUP_CONCAT subquery is applied to every SELECT. With pagination, this is acceptable (usually <100 rows per query). But if a report fetches all jobs for a date range, it could be slow.
+- Improvement path: For reporting endpoints, use a separate optimized query with a JOIN instead of subquery. Cache technician lists if they are rarely updated.
 
-**Problem:** Multiple dispatchers assigning jobs to the same vehicle/technician simultaneously causes lock timeouts.
+**Database Connection Pool Not Explicitly Configured:**
+- Problem: `db.getConnection()` is called frequently but pool size/timeout settings are not visible in code.
+- Files: `vehicle-scheduling-backend/src/config/database.js` (not provided, but assumed based on patterns)
+- Cause: Default pool settings may be too small for concurrent requests or too large, wasting memory.
+- Improvement path: Review and document pool settings. Test with load generation to find optimal pool size. Consider connection retry logic with exponential backoff.
 
-**Files:** `vehicle-scheduling-backend/src/services/jobAssignmentService.js` lines 168-271
+**Date Range Queries Not Indexed:**
+- Problem: Queries like `WHERE scheduled_date BETWEEN ? AND ?` require a full table scan if scheduled_date is not indexed.
+- Files: `vehicle-scheduling-backend/src/models/Job.js` (line 900, getJobsByDateRange)
+- Cause: Database schema not shown, but common issue in scheduling apps.
+- Improvement path: Ensure scheduled_date is indexed. If job volume grows to 100k+, add a composite index on (scheduled_date, current_status).
 
-**Cause:** Conflict checking is done OUTSIDE transaction (good, reduces lock time), but STEP 4 (minimal transaction) still performs multiple writes (DELETE, INSERT × 2, UPDATE) sequentially. Under load, these acquire row locks on jobs, job_assignments, job_technicians tables. If another dispatcher tries to assign at the same moment, they wait for the lock.
-
-**Current bottleneck:** 50-100ms lock hold time. At >5 concurrent assignments, timeouts (default MySQL lock_wait_timeout = 50s) are rare but possible under sustained load.
-
-**Improvement path:**
-- Query optimization: batch delete + insert into single statement if possible
-- Add connection pooling priority queue (mysql2 pool already configured with 10 connections; verify sufficiency under load)
-- Reduce transaction scope further: move job status update outside critical section (accept eventual consistency for status field)
-- Add retry logic with exponential backoff for `ER_LOCK_WAIT_TIMEOUT` errors
-
----
-
-### 2. Dashboard Data Load Triggers Multiple Sequential API Calls
-
-**Problem:** Dashboard loads job counts, vehicle counts, and pending assignments in separate API calls without parallelization or pagination.
-
-**Files:**
-- `vehicle_scheduling_app/lib/screens/dashboard/dashboard_screen.dart`
-- `vehicle_scheduling_app/lib/providers/job_provider.dart`
-
-**Cause:** Flutter screen calls `loadJobs()`, `loadVehicles()`, `loadDashboardStats()` sequentially. Each call waits for previous one to complete. On slow networks (3G), this can take 4-6 seconds to render dashboard.
-
-**Improvement path:**
-- Use `Future.wait()` to parallelize API calls:
-  ```dart
-  final results = await Future.wait([
-    jobProvider.loadJobs(),
-    vehicleProvider.loadVehicles(),
-    ...
-  ]);
-  ```
-- Implement pagination for large job lists (current query returns all jobs)
-- Cache dashboard stats with 30-60 second TTL to reduce API load
-
----
-
-### 3. Large SQL Joins Without Index Verification
-
-**Problem:** Reports and dashboard queries perform multi-table JOINs (jobs → job_assignments → vehicles → users) without explicit index documentation.
-
-**Files:**
-- `vehicle-scheduling-backend/src/models/Job.js` (getJobsByTechnician, getAllJobs with JOINs)
-- Database schema `vehicle_scheduling.sql`
-
-**Cause:** SQL dumps provided don't show CREATE INDEX statements. Query planner may be doing full table scans on larger datasets.
-
-**Current impact:** Low (test data set is small). At 10k+ jobs, queries could become slow (table scan vs index seek).
-
-**Improvement path:**
-- Audit queries with EXPLAIN PLAN to identify missing indexes
-- Add indexes on foreign keys and filter columns:
-  ```sql
-  CREATE INDEX idx_job_assignments_vehicle ON job_assignments(vehicle_id);
-  CREATE INDEX idx_job_technicians_user ON job_technicians(user_id);
-  CREATE INDEX idx_jobs_created_by ON jobs(created_by);
-  ```
-- Document recommended indexes in schema file
-
----
+**Flutter UI Rebuilds on Every Job Provider Change:**
+- Problem: Many screens (JobDetailScreen, JobsListScreen) use `context.watch<JobProvider>()` which triggers a full rebuild whenever ANY job property changes, not just the one being viewed.
+- Files: `vehicle_scheduling_app/lib/screens/jobs/job_detail_screen.dart`, `vehicle_scheduling_app/lib/screens/jobs/jobs_list_screen.dart`
+- Cause: Provider pattern without selector/scoping. If user edits one job, all screens watching JobProvider rebuild.
+- Improvement path: Use `context.select((JobProvider p) => p.selectedJob)` to scope listeners to specific properties. Implement a JobCache layer to prevent unnecessary fetches.
 
 ## Fragile Areas
 
-### 1. Date Serialization (Timezone Handling)
+**Job Status Transition Validation — Scattered Logic:**
+- Files: `vehicle_scheduling_app/lib/screens/jobs/job_detail_screen.dart` (lines 75-97 define allowed transitions), `vehicle-scheduling-backend/src/models/Job.js` (line 776 validates status is in enum list)
+- Why fragile: Allowed status transitions are defined in Flutter only. If a status is added to the database enum, the Flutter logic must be updated separately or jobs will enter invalid states.
+- Safe modification: Update Flutter transitions first, then add to database enum, then add backend validation. Test all status combinations before deployment.
+- Test coverage: No unit tests for status transition logic. Manual testing required.
 
-**Why fragile:** MySQL DATE columns are timezone-naive. Node.js JSON.stringify converts JavaScript Date objects to ISO 8601 UTC, which can shift dates by timezone offset. Flutter parses the shifted date.
+**Driver Conflict Detection — Multiple Implementations:**
+- Files: `vehicle-scheduling-backend/src/services/jobAssignmentService.js` (checkDriversAvailability call line 138), `vehicle-scheduling-backend/src/services/vehicleAvailabilityService.js` (actual implementation), `vehicle-scheduling-backend/src/models/Job.js` (removeDriversFromConflictingJobs line 723)
+- Why fragile: Three different methods with overlapping responsibility. Change in one may require changes in others. The flow from route → service → model is not clearly enforced.
+- Safe modification: Trace the entire flow from incoming request to DB write. Verify all edge cases (multi-day jobs, timezone boundaries). Add integration tests for each scenario (normal assign, conflict, override).
+- Test coverage: No visible integration tests. All testing is manual.
 
-**Files:** `vehicle-scheduling-backend/src/models/Job.js` lines 19-64
+**Flutter State Synchronization Between Providers:**
+- Files: `vehicle_scheduling_app/lib/providers/job_provider.dart`, `vehicle_scheduling_app/lib/providers/vehicle_provider.dart`, `vehicle_scheduling_app/lib/providers/auth_provider.dart`
+- Why fragile: Multiple providers manage overlapping state. If a job is deleted, the vehicle_provider still holds references to it. If a technician's role changes, all provider caches become stale.
+- Safe modification: Before making changes to provider architecture, add a state consistency check (e.g., validate that all job IDs exist in the job list). Implement a cache invalidation strategy (clear on logout, on version mismatch, on explicit refresh).
+- Test coverage: Providers are not unit tested. Need to add provider tests for state transitions.
 
-**Safe modification:** The codebase already has defensive date formatting (`_formatDateOnly()`) that uses local date methods (getFullYear, getMonth, getDate) instead of UTC methods. This is the correct approach. BUT developers adding new queries must remember to apply this formatter.
-
-**Test coverage gap:** No tests verify that date serialization preserves the original date across timezones.
-
-**Mitigation:**
-- Add JSDoc comment above date-returning queries: "Apply `_formatDateOnly()` to results"
-- Add helper method `Job._fixDates()` to centralize the fix
-- Unit test: parse date in UTC+2 timezone, verify response contains correct date string
-
----
-
-### 2. Role Normalization and Permission Mapping
-
-**Why fragile:** Backend role normalization maps `driver` → `technician` but only for legacy data. The system now has four roles: admin, scheduler, dispatcher, technician. Code includes comments about dispatcher potentially mapping to scheduler but this mapping is not currently active.
-
-**Files:**
-- `vehicle-scheduling-backend/src/controllers/authController.js` lines 86-87, 142-143
-- `vehicle-scheduling-backend/src/config/constants.js` (PERMISSIONS map)
-
-**Safe modification:** Role normalization should only happen in one place (authController._normaliseRole()). BUT permission checking is decentralized—some routes check role directly (`req.user.role === 'admin'`), others use permission strings from AuthProvider.
-
-**Test coverage gap:** No test verifies that permission list changes are reflected in both backend and Flutter. If PERMISSIONS map is updated in constants.js, Flutter still uses cached permissions from JWT.
-
-**Mitigation:**
-- Add permission change endpoint that returns fresh permissions without requiring re-login
-- Document permission matrix clearly in README (which permissions map to which roles)
-- Add test: verify every route permission check against PERMISSIONS map
-
----
-
-### 3. Multi-Technician Assignment Without Cascade Delete Handling
-
-**Why fragile:** Job can have multiple technicians in `job_technicians` table, but when a job is deleted, the cascade relies on database FK constraint. If an application layer tries to delete a job without the database enforcing the cascade, orphaned technician records remain.
-
-**Files:**
-- `vehicle_scheduling.sql` lines 145-200 (job_technicians table definition with FK)
-- `vehicle-scheduling-backend/src/models/Job.js` (deleteJob method—if it exists)
-
-**Safe modification:** Always use database-level deletion or ensure application layer also deletes from job_technicians and job_assignments. Current code appears to rely on DB-level cascade, which is correct IF the schema is always enforced.
-
-**Test coverage gap:** No test verifies orphaned records don't exist after job deletion.
-
-**Mitigation:**
-- Add explicit DELETE statements in application code before job delete for clarity
-- Add data integrity check: `SELECT * FROM job_technicians WHERE job_id NOT IN (SELECT id FROM jobs)`
-
----
+**Database Connection Cleanup in Service Methods:**
+- Files: `vehicle-scheduling-backend/src/services/jobAssignmentService.js` (finally block line 265-270), `vehicle-scheduling-backend/src/models/Job.js` (finally block line 701-702)
+- Why fragile: Multiple try/finally blocks with connection.release(). If one is missing or misplaced, the connection leaks. The pattern is inconsistent.
+- Safe modification: Extract connection management into a helper function or middleware. Use async context managers (if Node.js version supports) to guarantee cleanup.
+- Test coverage: Load test required to catch connection leaks. No visible stress tests in repo.
 
 ## Scaling Limits
 
-### 1. Connection Pool Size (10 Connections)
+**In-Memory Aggregation in GROUP_CONCAT:**
+- Current capacity: MySQL GROUP_CONCAT default max is 1024 bytes. If a job has > ~20 technicians (each ~50 bytes in the GROUP_CONCAT format), the result truncates silently.
+- Limit: Breaks around 100 technicians per job.
+- Scaling path: Set GROUP_CONCAT limit higher in MySQL config (`group_concat_max_len`). Better: paginate technician lists or store in a separate API endpoint.
 
-**Current capacity:** 10 simultaneous database connections configured in `src/config/database.js` line 29.
+**Single Database Server:**
+- Current capacity: Schema supports up to ~1M jobs before query performance degrades. No replication, no sharding.
+- Limit: If user base grows to 100+ concurrent drivers, database locks contend and job assignment slows.
+- Scaling path: Add read replicas for reporting. Implement job assignment queue (Redis) to decouple from direct DB writes. Shard by date range or region if geographic distribution is needed.
 
-**Limit:** At 5 concurrent user sessions each making 2 simultaneous API calls, pool can handle ~10 requests. Beyond that, subsequent requests queue and may timeout if initial requests are slow.
+**Flutter App Loads All Jobs Into Memory:**
+- Current capacity: Loading 10k+ jobs into a single JobProvider causes memory pressure and slow navigation.
+- Limit: App crashes or becomes unresponsive above ~5k jobs.
+- Scaling path: Implement pagination (load 100 jobs at a time). Add local caching with SQLite. Use a state management solution that supports lazy loading (Riverpod over Provider).
 
-**Scaling path:**
-- Monitor connection pool usage in production: log active connection count when queue depth > 0
-- Increase to 20-30 if horizontal scaling is not an option
-- Implement connection pooling caching at application layer for high-throughput scenarios
-- Consider moving to connection proxy (PgBouncer alternative for MySQL)
-
----
-
-### 2. Single Node.js Process (No Clustering)
-
-**Current capacity:** One Node.js process handles all requests. No load balancing or worker clustering.
-
-**Limit:** Node.js single-threaded event loop maxes out at ~200-300 req/sec on mid-range hardware depending on query complexity.
-
-**Scaling path:**
-- Implement Node.js clustering using `cluster` module (spawn one worker per CPU core)
-- Or deploy multiple container instances behind load balancer (Kubernetes, Docker Compose)
-- Add monitoring of CPU and event loop lag
-- Current deployment likely handles this via Docker + AWS (see TECHNICAL_ARCHITECTURE.md line 124), but no explicit configuration shown
-
----
-
-### 3. No Caching Layer
-
-**Current capacity:** Every dashboard view, job list, vehicle list triggers fresh database queries with no caching.
-
-**Limit:** At >1000 concurrent dashboards, database query load becomes bottleneck. Response times degrade from 200ms to 2000ms+.
-
-**Scaling path:**
-- Add Redis caching for frequently-read data: dashboard stats, vehicle list, pending jobs
-- Implement cache invalidation on write: when job status changes, invalidate job list cache
-- Use short TTL (30-60 sec) for time-series data to balance freshness vs load
-
----
+**No Caching Layer:**
+- Current capacity: Every screen load makes a fresh API call. If 10 users open the job list simultaneously, the backend gets 10 identical requests.
+- Limit: Database load spikes on high concurrency.
+- Scaling path: Add Redis caching with TTL. Cache job lists for 30 seconds. Invalidate on create/update. Use ETag-based caching for client-side HTTP cache.
 
 ## Dependencies at Risk
 
-### 1. Old swagger-ui and swagger-jsdoc (Low Risk)
+**Express.js Minimal Validation:**
+- Risk: No schema validation (Joi, Yup) at express route layer. Relies on ad-hoc validation in route handlers.
+- Impact: Easy to miss validation when new routes are added. Malformed requests reach business logic.
+- Migration plan: Introduce express-validator or a dedicated validation middleware. No breaking changes needed — add gradually.
 
-**Packages:** `swagger-ui-express` (5.0.1), `swagger-jsdoc` (6.2.8)
+**No Query Builder or ORM:**
+- Risk: Raw SQL queries are prone to mistakes. No built-in migration system.
+- Impact: Refactoring database schema is manual. No history of changes.
+- Migration plan: Consider Sequelize or TypeORM. Large effort; only necessary if schema volatility increases.
 
-**Risk:** These are not security-critical (documentation only) but are outdated. Latest versions available.
-
-**Impact:** Minor; if Swagger UI is exposed to internet, XSS vulnerabilities in old UI code could be exploited.
-
-**Migration plan:** Update to latest versions as part of next maintenance sprint. Low priority.
-
----
-
-### 2. flutter google_maps_flutter (v2.10.0 - Requires Testing)
-
-**Package:** `google_maps_flutter` (2.10.0) in pubspec.yaml
-
-**Risk:** Google Maps integration newly added. Plugin requires API key configuration, Android key hashes, iOS bundle IDs, etc. Common source of integration bugs.
-
-**Impact:** If API key is leaked or misconfigured, location data leaks or maps fail to load in production.
-
-**Recommendations:**
-- Verify API key is not committed in git
-- Use separate API keys for dev/staging/production
-- Test maps functionality on actual Android/iOS devices (not just emulator)
-- Add documentation for maps setup in README
-
----
+**Flutter SDK Versions Not Pinned:**
+- Risk: pubspec.yaml likely uses caret (`^`) or tilde (`~`) versions. Minor updates could break UI rendering.
+- Impact: Unpredictable behavior across developer machines and deployment.
+- Migration plan: Pin exact versions for critical dependencies (flutter, provider, http). Use `pub get --no-upgrade`.
 
 ## Missing Critical Features
 
-### 1. No Real-Time Job Updates (WebSockets)
+**Audit Trail for Job Changes:**
+- Problem: When a job status changes from 'assigned' to 'in_progress', no record of who changed it, when, or why.
+- Blocks: Compliance/debugging. Cannot track who cancelled a job and when.
+- Current: current_at, updated_at exist but no audit table. Changes are logged to console only.
+- Solution: Add a job_audit_log table. Record every status change, assignment change, and user who made it.
 
-**Problem:** When dispatcher assigns a job to a technician, technician must refresh their "My Jobs" screen to see the new assignment. No push notifications or live updates.
+**Job Completion Handoff:**
+- Problem: No photos, notes, or signature capture when a technician marks a job 'completed'. Cannot verify work was done.
+- Blocks: Quality assurance, customer disputes.
+- Current: None.
+- Solution: Add job_completion_details table with photo URLs, work notes, technician signature. Require photo before status='completed'.
 
-**Blocks:** Operational efficiency. Technicians may miss urgent job assignments for 30+ seconds if they're not actively refreshing.
+**Real-Time Notifications:**
+- Problem: When a job is assigned to a driver, the driver must refresh the app to see it. No push notifications.
+- Blocks: Drivers miss urgent jobs. Dispatcher cannot notify drivers immediately.
+- Current: None. Polling only.
+- Solution: Add Firebase Cloud Messaging (FCM). Send notification when job is assigned or status changes.
 
-**Current workaround:** Users manually refresh or wait for auto-refresh timer.
-
-**Implementation path:**
-- Add Socket.io or native WebSocket support to backend
-- Emit job assignment events to assigned technician's connected client
-- Update Flutter to open persistent WebSocket connection on login
-- Publish updates to JobProvider to trigger UI rebuild
-
----
-
-### 2. No Proof-of-Work (Photo Uploads)
-
-**Problem:** Technicians cannot upload photos of completed work. Dispatchers have no way to verify job completion.
-
-**Blocks:** Quality assurance and customer accountability. System is audit-light for completed jobs.
-
-**Current workaround:** Manual email/SMS photo verification outside system.
-
-**Implementation path:**
-- Backend: add image upload endpoint (multipart/form-data support)
-- Flutter: integrate image picker, compress before upload
-- Database: add job_photos table with FK to jobs, URLs to S3 or similar
-- See TECHNICAL_ARCHITECTURE.md line 173 for planned extensibility
-
----
+**Offline Mode:**
+- Problem: If network drops, technician app is unusable. Cannot view assigned jobs or mark progress.
+- Blocks: Drivers in areas with poor connectivity.
+- Current: None. All API calls require network.
+- Solution: Implement Hive (Flutter local DB) to cache jobs. Queue status updates when offline. Sync on reconnection.
 
 ## Test Coverage Gaps
 
-### 1. No Automated Tests (Critical Risk)
+**No Unit Tests for Job Scheduling Logic:**
+- What's not tested: Conflict detection, driver availability, timezone date handling
+- Files: `vehicle-scheduling-backend/src/services/vehicleAvailabilityService.js`, `vehicle-scheduling-backend/src/models/Job.js`
+- Risk: Conflict detection bugs (like BUG 3) are found in production or during manual testing only.
+- Priority: High. Add Jest tests for all conflict scenarios: overlapping times, same-day jobs, multi-driver assignments.
 
-**What's not tested:** Entire backend. No unit, integration, or E2E tests.
+**No Integration Tests for API Flows:**
+- What's not tested: Full request → database → response cycle. Assignment flow with multiple drivers.
+- Files: Entire `vehicle-scheduling-backend/src/routes/` and `src/services/`
+- Risk: Breaking changes introduced without detection.
+- Priority: High. Add tests for: create job + assign vehicle + assign drivers + mark in_progress + complete.
 
-**Files:** `vehicle-scheduling-backend/package.json` line 8: `"test": "echo \"Error: no test specified\" && exit 1"`
+**No End-to-End Tests:**
+- What's not tested: Flutter UI flow. Admin creates job, assigns to vehicle, driver views and completes it.
+- Files: All of `vehicle_scheduling_app/lib/screens/`
+- Risk: UI regressions (like BUG 2) ship to production.
+- Priority: Medium. Use Flutter integration_test or Patrol. Test core flows: login, view jobs, assign drivers, update status.
 
-**Risk:** Regressions are caught only in manual testing. Bug fixes (like the admin override fix) are not verified to not break existing functionality.
+**No Provider State Tests:**
+- What's not tested: JobProvider, VehicleProvider, AuthProvider state transitions
+- Files: `vehicle_scheduling_app/lib/providers/`
+- Risk: State sync bugs (like BUG 1 miscounting) are hard to catch.
+- Priority: Medium. Add provider tests using Mocktail. Verify state updates when API calls succeed/fail.
 
-**Priority:** HIGH
-
-**Recommendations:**
-- Set up Jest for backend (add dev dependency)
-- Create test suite for critical paths:
-  - Job assignment (normal case, conflict case, override case)
-  - Authentication (valid login, invalid password, role assignment)
-  - Permission checks (technician sees only their jobs, admin sees all)
-- Target: 70% coverage of critical paths
-- Add pre-commit hook to run tests (prevent untested code from reaching main)
-- Estimated effort: 2-3 days for basic suite
-
----
-
-### 2. Flutter Widget Tests Incomplete
-
-**What's not tested:** JobDetailScreen assignment dialogs, driver conflict UI, admin override checkbox behavior.
-
-**Files:** `vehicle_scheduling_app/test/` (likely empty or minimal)
-
-**Risk:** UI bugs (like the false failure toast) are caught only in manual QA.
-
-**Priority:** MEDIUM
-
-**Recommendations:**
-- Add widget tests for:
-  - Job detail screen displays technicians correctly
-  - Admin override checkbox is only visible to admins
-  - Assignment fails with correct error message on conflict
-  - Loading spinners show/hide correctly
-- Use testWidgets() from flutter_test package
-
----
-
-### 3. Date Serialization Not Tested Across Timezones
-
-**What's not tested:** Job dates remain unchanged when parsed in different server timezones.
-
-**Files:** `vehicle-scheduling-backend/src/models/Job.js` lines 19-64
-
-**Risk:** If code is deployed to server in different timezone (e.g., UTC vs UTC+2), date shifting bugs re-emerge.
-
-**Priority:** MEDIUM
-
-**Recommendations:**
-- Add test: create job with date 2026-03-11, parse response JSON, verify date string is unchanged regardless of server timezone
-- Run test with NODE_TZ=UTC and NODE_TZ=+0200 to verify both scenarios
+**No Load/Performance Tests:**
+- What's not tested: Database with 100k jobs. API with 100 concurrent requests. Flutter with 10k jobs in list.
+- Files: All backend, Flutter
+- Risk: Scaling issues discovered by real users, not in testing.
+- Priority: Low (non-critical but valuable). Use k6 or JMeter for backend. Use Flutter Devtools for app performance profiling.
 
 ---
 

@@ -2,567 +2,500 @@
 
 **Analysis Date:** 2026-03-21
 
-## Backend Testing
+## Test Framework
 
-### Test Framework
+**Runner:**
+- Framework: None configured
+- `package.json` shows: `"test": "echo \"Error: no test specified\" && exit 1"`
+- Tests are not set up or executed in this project
 
-**Status:** Not Configured
-- No test framework installed (Jest, Mocha, etc.)
-- `package.json` script shows: `"test": "echo \"Error: no test specified\" && exit 1"`
-- No test files present in repository (`*.test.js`, `*.spec.js`)
+**Assertion Library:**
+- Not applicable - no testing framework installed
 
-### Alternative Verification Methods
+**Run Commands:**
+Currently testing is not configured. To run tests once set up:
+```bash
+npm test                           # Run all tests (when configured)
+npm run test:watch                # Watch mode (when configured)
+npm run test:coverage             # Coverage report (when configured)
+```
 
-**Current Approach:**
-- Manual HTTP testing via cURL or Postman
-- Database state inspection via direct MySQL queries
-- Inline console logging for debugging
+**Dart/Flutter Testing:**
+- Flutter has built-in test framework via `flutter_test` package (in devDependencies)
+- No test files detected in the codebase
+- Tests could be run with: `flutter test` or `dart test`
 
-**Swagger Documentation:**
-- API routes documented in `src/config/swagger.js`
-- Swagger UI accessible at `/swagger`
-- Serves as live test/documentation interface
+## Test File Organization
 
-**Entry Point for Manual Testing:**
-- `src/server.js` - starts Express server on PORT (default 3000)
-- Prints startup messages with endpoints:
-  ```
-  📡 Server:  http://localhost:3000
-  🔗 API:     http://localhost:3000/api
-  🔐 Login:   POST http://localhost:3000/api/auth/login
-  ```
+**Location:**
+- Backend: No test files found
+- Frontend: No test files found
+- Proposed: Tests should be co-located with source
+  - JavaScript: `src/models/__tests__/Job.test.js` alongside `src/models/Job.js`
+  - Dart: `test/services/job_service_test.dart` in project root `test/` directory
 
-**Database Testing Script:**
-- `test-coonection-db.js` - manual connection test
-- Seed script: `scripts/seedPasswords.js` - populate test data
+**Naming:**
+- JavaScript: `[module].test.js` or `[module].spec.js` convention
+- Dart: `[module]_test.dart` convention
 
-### Recommended Testing Patterns (If Implemented)
+**Structure:**
+```
+vehicle-scheduling-backend/
+├── src/
+│   ├── models/
+│   │   ├── Job.js
+│   │   └── __tests__/
+│   │       └── Job.test.js
+│   ├── services/
+│   │   ├── jobAssignmentService.js
+│   │   └── __tests__/
+│   │       └── jobAssignmentService.test.js
+│   └── routes/
+│       ├── jobs.js
+│       └── __tests__/
+│           └── jobs.integration.test.js
 
-**Unit Test Structure:**
+vehicle_scheduling_app/
+└── test/
+    ├── models/
+    │   └── job_test.dart
+    ├── services/
+    │   └── job_service_test.dart
+    └── providers/
+        └── job_provider_test.dart
+```
+
+## Test Structure
+
+**Recommended Suite Organization:**
+
+JavaScript (Jest/Vitest pattern):
 ```javascript
 describe('Job Model', () => {
   describe('createJob', () => {
-    it('should create a job with required fields', async () => {
-      const jobData = {
-        customer_name: 'John Doe',
-        customer_address: '123 Main St',
-        job_type: 'installation',
-        scheduled_date: '2026-03-21',
-        scheduled_time_start: '09:00:00',
-        scheduled_time_end: '10:00:00',
-        estimated_duration_minutes: 60,
-        created_by: 1
-      };
+    it('should create a job with valid data', async () => {
+      // arrange
+      const jobData = { ... };
 
-      const job = await Job.createJob(jobData);
+      // act
+      const result = await Job.createJob(jobData);
 
-      expect(job).toHaveProperty('id');
-      expect(job.customer_name).toBe('John Doe');
-      expect(job.current_status).toBe('pending');  // ← default status
+      // assert
+      expect(result).toHaveProperty('id');
+      expect(result.job_number).toMatch(/^JOB-\d{4}-\d{4}$/);
     });
 
-    it('should throw on duplicate job number', async () => {
-      const jobData = { /* ... */ };
+    it('should throw error when creator user does not exist', async () => {
+      const jobData = { created_by: 99999, ... };
 
-      await expect(Job.createJob(jobData)).rejects.toThrow('duplicate entry');
+      await expect(Job.createJob(jobData))
+        .rejects
+        .toThrow('Invalid user ID - creator does not exist');
+    });
+  });
+
+  describe('getJobById', () => {
+    it('should return null for non-existent job', async () => {
+      const job = await Job.getJobById(99999);
+      expect(job).toBeNull();
     });
 
-    it('should handle date formatting correctly', async () => {
-      const jobData = {
-        // ...
-        scheduled_date: '2026-02-23'
-      };
-
-      const job = await Job.createJob(jobData);
-      expect(job.scheduled_date).toBe('2026-02-23');  // ← never shifted
+    it('should parse technicians_json correctly', async () => {
+      const job = await Job.getJobById(1);
+      expect(job.technicians_json).toBeInstanceOf(Array);
+      expect(job.technicians_json[0]).toHaveProperty('id');
+      expect(job.technicians_json[0]).toHaveProperty('full_name');
     });
   });
 });
 ```
 
-**Integration Test Structure:**
-```javascript
-describe('Job Assignment Workflow', () => {
-  let job, vehicle, driver;
-
-  beforeAll(async () => {
-    // Setup: create test fixtures
-    job = await Job.createJob({...});
-    vehicle = await Vehicle.getVehicleById(1);
-    driver = await User.getUserById(1);
-  });
-
-  it('should assign vehicle to job', async () => {
-    const assignment = await JobAssignmentService.assignJobToVehicle({
-      job_id: job.id,
-      vehicle_id: vehicle.id,
-      driver_id: driver.id,
-      assigned_by: 1
-    });
-
-    expect(assignment.success).toBe(true);
-    const updated = await Job.getJobById(job.id);
-    expect(updated.vehicle_id).toBe(vehicle.id);
-    expect(updated.current_status).toBe('assigned');
-  });
-
-  it('should detect time conflicts', async () => {
-    // Assign same vehicle to overlapping time
-    const conflict = await JobAssignmentService.assignJobToVehicle({
-      job_id: conflictingJob.id,
-      vehicle_id: vehicle.id,
-      assigned_by: 1
-    });
-
-    expect(conflict.success).toBe(false);
-    expect(conflict.error).toMatch(/conflict/i);
-  });
-
-  afterAll(async () => {
-    // Cleanup
-    await db.query('DELETE FROM jobs WHERE id = ?', [job.id]);
-  });
-});
-```
-
-**Error Handling Tests:**
-```javascript
-describe('Error Handling', () => {
-  it('should catch database errors gracefully', async () => {
-    const invalidJob = await Job.createJob({
-      customer_name: null,  // ← NOT NULL constraint
-      // ...
-    });
-
-    expect(invalidJob).toBeNull();
-    // OR
-    // expect(() => Job.createJob(...)).rejects.toThrow();
-  });
-
-  it('should validate input before DB call', async () => {
-    expect(() => {
-      JobAssignmentService.assignJobToVehicle({
-        job_id: null,  // ← required
-        vehicle_id: 1
-      });
-    }).toThrow('job_id is required');
-  });
-
-  it('should handle permission denial', async () => {
-    const technician = { role: 'technician' };
-    const res = {
-      status: jest.fn().mockReturnThis(),
-      json: jest.fn()
-    };
-
-    requirePermission('vehicles:delete')(
-      { user: technician },
-      res,
-      jest.fn()
-    );
-
-    expect(res.status).toHaveBeenCalledWith(403);
-  });
-});
-```
-
-**Mocking Patterns (If Implemented):**
-```javascript
-// Mock database layer
-jest.mock('../config/database', () => ({
-  query: jest.fn(),
-  getConnection: jest.fn()
-}));
-
-// Mock external services
-jest.mock('../services/vehicleAvailabilityService', () => ({
-  checkVehicleAvailability: jest.fn().mockResolvedValue({
-    isAvailable: true,
-    conflicts: []
-  })
-}));
-
-// Mock JWT verification
-jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn().mockReturnValue('token'),
-  verify: jest.fn().mockReturnValue({ id: 1, role: 'admin' })
-}));
-```
-
----
-
-## Frontend Testing
-
-### Test Framework
-
-**Status:** Not Configured
-- No test runner installed (Flutter Test, Mocktail, etc.)
-- `pubspec.yaml` includes `flutter_test` SDK dependency (available, not used)
-- No test files present in repository
-
-### Alternative Verification Methods
-
-**Hot Reload & Manual Testing:**
-- `flutter run` with hot reload for rapid iteration
-- Debug prints via `print()` and `debugPrint()`
-- Flutter DevTools for performance/widget inspection
-
-**State Inspection:**
-- Provider state debuggable via DevTools
-- Error messages displayed via Fluttertoast
-- Status enums (`JobStatus`) show operation state in UI
-
-### Recommended Testing Patterns (If Implemented)
-
-**Widget Test Structure:**
+Dart (Flutter test pattern):
 ```dart
-import 'package:flutter_test/flutter_test.dart';
-import 'package:provider/provider.dart';
-import 'package:vehicle_scheduling_app/models/job.dart';
-import 'package:vehicle_scheduling_app/providers/job_provider.dart';
-import 'package:vehicle_scheduling_app/screens/jobs/job_detail_screen.dart';
-
-void main() {
-  group('JobDetailScreen', () => {
-    testWidgets('displays job details when loaded', (WidgetTester tester) async {
-      final mockJob = Job(
-        id: 1,
-        jobNumber: 'JOB-2026-0001',
-        jobType: 'installation',
-        customerName: 'John Doe',
-        customerAddress: '123 Main St',
-        scheduledDate: DateTime(2026, 3, 21),
-        scheduledTimeStart: '09:00:00',
-        scheduledTimeEnd: '10:00:00',
-        estimatedDurationMinutes: 60,
-        currentStatus: 'pending',
-        priority: 'normal',
-        createdBy: 1,
-        createdAt: DateTime.now(),
-        updatedAt: DateTime.now(),
-      );
-
-      await tester.pumpWidget(
-        MultiProvider(
-          providers: [
-            ChangeNotifierProvider(
-              create: (_) => JobProvider()..selectedJob = mockJob,
-            ),
-          ],
-          child: const MaterialApp(
-            home: JobDetailScreen(jobId: 1),
-          ),
-        ),
-      );
-
-      expect(find.text('JOB-2026-0001'), findsOneWidget);
-      expect(find.text('John Doe'), findsOneWidget);
-      expect(find.text('pending'), findsOneWidget);
-    });
-
-    testWidgets('shows loading indicator while fetching', (WidgetTester tester) async {
-      final jobProvider = JobProvider();
-      // Simulate loading state
-      jobProvider.loadJobById(1);
-
-      await tester.pumpWidget(
-        ChangeNotifierProvider.value(
-          value: jobProvider,
-          child: const MaterialApp(
-            home: Scaffold(body: CircularProgressIndicator()),
-          ),
-        ),
-      );
-
-      expect(find.byType(CircularProgressIndicator), findsOneWidget);
-    });
-
-    testWidgets('displays error message on failure', (WidgetTester tester) async {
-      final jobProvider = JobProvider();
-      // Simulate error
-      jobProvider._error = 'Failed to load job';
-      jobProvider._status = JobStatus.error;
-
-      await tester.pumpWidget(
-        ChangeNotifierProvider.value(
-          value: jobProvider,
-          child: const MaterialApp(
-            home: Scaffold(body: Text('Error loading job')),
-          ),
-        ),
-      );
-
-      expect(find.text('Error loading job'), findsOneWidget);
-    });
-  });
-}
-```
-
-**Provider/Service Test Structure:**
-```dart
-import 'package:flutter_test/flutter_test.dart';
-import 'package:mocktail/mocktail.dart';
-import 'package:vehicle_scheduling_app/models/job.dart';
-import 'package:vehicle_scheduling_app/providers/job_provider.dart';
-import 'package:vehicle_scheduling_app/services/job_service.dart';
-
-class MockJobService extends Mock implements JobService {}
-
 void main() {
   group('JobProvider', () => {
-    late JobProvider jobProvider;
-    late MockJobService mockJobService;
+    late JobProvider provider;
 
     setUp(() {
-      mockJobService = MockJobService();
-      jobProvider = JobProvider();
-      // Replace internal service with mock
-      jobProvider._jobService = mockJobService;
+      provider = JobProvider();
     });
 
-    test('loadJobs sets status to loading initially', () async {
-      when(() => mockJobService.getAllJobs()).thenAnswer(
-        (_) async => []
-      );
+    test('loadJobs sets status to loading then success', () async {
+      expect(provider.isLoading, false);
 
-      final future = jobProvider.loadJobs();
-      expect(jobProvider.isLoading, true);
+      // Trigger load
+      provider.loadJobs();
 
-      await future;
-      expect(jobProvider.isLoading, false);
+      // Should be loading
+      expect(provider.isLoading, true);
+
+      // Wait for completion
+      await Future.delayed(Duration(milliseconds: 100));
+
+      // Should have completed
+      expect(provider.status, JobStatus.success);
     });
 
-    test('loadJobs populates jobs list on success', () async {
-      final mockJobs = [
-        Job(
-          id: 1,
-          jobNumber: 'JOB-2026-0001',
-          // ... other required fields
-        ),
-      ];
+    test('error state is set on API failure', () async {
+      // Mock service to fail
+      provider.loadJobs();
+      await Future.delayed(Duration(milliseconds: 100));
 
-      when(() => mockJobService.getAllJobs()).thenAnswer(
-        (_) async => mockJobs
-      );
-
-      await jobProvider.loadJobs();
-
-      expect(jobProvider.allJobs, equals(mockJobs));
-      expect(jobProvider.status, JobStatus.success);
-    });
-
-    test('loadJobs stores error on failure', () async {
-      const errorMsg = 'Network error';
-
-      when(() => mockJobService.getAllJobs()).thenThrow(
-        Exception(errorMsg)
-      );
-
-      await jobProvider.loadJobs();
-
-      expect(jobProvider.status, JobStatus.error);
-      expect(jobProvider.error, contains(errorMsg));
-    });
-
-    test('createJob returns Job? with correct ID', () async {
-      final newJob = Job(
-        id: 999,
-        jobNumber: 'JOB-2026-0999',
-        // ...
-      );
-
-      when(() => mockJobService.createJob(any())).thenAnswer(
-        (_) async => newJob
-      );
-
-      final result = await jobProvider.createJob(
-        customerName: 'Test Customer',
-        // ... other params
-      );
-
-      expect(result, equals(newJob));
-      expect(result?.id, equals(999));
-    });
-
-    test('assignTechnicians notifies listeners after success', () async {
-      when(() => mockJobService.assignTechnicians(any(), any(), any()))
-        .thenAnswer((_) async => true);
-
-      expect(() async {
-        await jobProvider.assignTechnicians(1, [2, 3], 1);
-      }, anyOf(isNotEmpty));  // ← would trigger notifyListeners
+      expect(provider.status, JobStatus.error);
+      expect(provider.error, isNotNull);
     });
   });
 }
 ```
 
-**Error Scenario Testing:**
-```dart
-test('handles API connection error gracefully', () async {
-  when(() => mockJobService.getAllJobs()).thenThrow(
-    SocketException('Failed to connect')
-  );
+**Patterns Observed in Codebase:**
 
-  await jobProvider.loadJobs();
+1. **Arrange-Act-Assert (AAA):**
+   - Setup test data (arrange)
+   - Call function under test (act)
+   - Verify results (assert)
 
-  expect(jobProvider.status, JobStatus.error);
-  expect(jobProvider.error, contains('Failed to connect'));
-  expect(jobProvider.allJobs, isEmpty);  // ← state preserved
-});
+2. **Error Path Testing:**
+   - Code explicitly checks for error conditions
+   - Tests should verify error messages match exactly
+   - Example from Job.js: "Cannot assign job with status X" — test must check this exact message
 
-test('filters jobs by status correctly', () {
-  jobProvider._jobs = [
-    Job(currentStatus: 'pending', ...),
-    Job(currentStatus: 'assigned', ...),
-    Job(currentStatus: 'completed', ...),
-  ];
+3. **State Transitions:**
+   - Services manage state machines (JobStatus: idle → loading → success/error)
+   - Tests should verify state transitions in order
 
-  jobProvider._statusFilter = 'pending';
+## Mocking
 
-  expect(jobProvider.filteredJobs.length, 1);
-  expect(jobProvider.filteredJobs[0].currentStatus, 'pending');
+**Framework:** None configured (would use Jest for JavaScript, mockito or Mocktail for Dart)
+
+**Patterns (Recommended):**
+
+JavaScript (with Jest):
+```javascript
+// Mock database
+jest.mock('../config/database');
+const db = require('../config/database');
+
+db.query.mockResolvedValue([
+  [{ id: 1, job_number: 'JOB-2026-0001', ... }],
+  []
+]);
+
+// Mock services
+jest.mock('../services/jobAssignmentService');
+const JobAssignmentService = require('../services/jobAssignmentService');
+
+JobAssignmentService.assignJobToVehicle.mockResolvedValue({
+  success: true,
+  assignment_id: 10
 });
 ```
 
-**Mocking Patterns (If Implemented):**
+Dart (with Mocktail):
 ```dart
-// Mock HTTP client
-class MockHttpClient extends Mock implements http.Client {}
+import 'package:mocktail/mocktail.dart';
 
-// Mock JobService
 class MockJobService extends Mock implements JobService {}
+class MockApiService extends Mock implements ApiService {}
 
-// Mock Provider for widget tests
-ChangeNotifierProvider.value(
-  value: mockJobProvider,
-  child: const MyWidget(),
-)
+void main() {
+  late MockJobService mockJobService;
+  late JobProvider provider;
 
-// Mock shared_preferences
-MockSharedPreferences mockSharedPrefs = MockSharedPreferences();
-when(mockSharedPrefs.getString('auth_token'))
-  .thenReturn('test-token');
+  setUp(() {
+    mockJobService = MockJobService();
+    provider = JobProvider();
+    provider._jobService = mockJobService;
+  });
+
+  test('loadJobs calls JobService.getAllJobs', () async {
+    when(() => mockJobService.getAllJobs())
+      .thenAnswer((_) async => [testJob1, testJob2]);
+
+    await provider.loadJobs();
+
+    verify(() => mockJobService.getAllJobs()).called(1);
+  });
+}
 ```
 
----
+**What to Mock:**
+- External services (database, API calls, third-party services)
+- Dependencies injected into service under test
+- Time-dependent behavior (use fake timer/scheduler)
+- Random number generators
 
-## What to Test
+**What NOT to Mock:**
+- Internal helper functions of the class under test
+- Value objects and data classes
+- Standard library functions (unless truly necessary)
+- The implementation being tested (test the real code path)
 
-### Backend Priority Areas
+## Fixtures and Factories
 
-**Must Test:**
-- `src/models/Job.js` - Data layer (create, read, update)
-  - Date formatting (`_fixDates()`) - critical timezone bug area
-  - Technician parsing (`_parseTechnicians()`) - GROUP_CONCAT handling
-  - Query filtering and edge cases
+**Test Data (Recommended):**
 
-- `src/middleware/authMiddleware.js` - Security
-  - Token validation (valid, expired, malformed)
-  - Role-based access control
-  - Permission checking
+JavaScript fixtures in `test/fixtures/jobs.js`:
+```javascript
+module.exports = {
+  createValidJobData: () => ({
+    customer_name: 'John Doe',
+    customer_phone: '555-1234',
+    customer_address: '123 Main St',
+    destination_lat: 40.7128,
+    destination_lng: -74.0060,
+    job_type: 'installation',
+    description: 'Install new equipment',
+    scheduled_date: '2026-03-25',
+    scheduled_time_start: '09:00:00',
+    scheduled_time_end: '11:00:00',
+    estimated_duration_minutes: 120,
+    priority: 'normal',
+    created_by: 1,
+    technician_ids: [2, 3]
+  }),
 
-- `src/services/jobAssignmentService.js` - Business logic
-  - Conflict detection (vehicle time overlaps)
-  - Driver availability checks
-  - Transaction handling (atomicity)
+  createJobWithStatus: (status) => ({
+    ...createValidJobData(),
+    current_status: status
+  }),
 
-**Should Test:**
-- `src/routes/jobs.js` - API endpoints
-  - Role-based filtering (technician vs admin)
-  - Parameter validation
-  - Response format consistency
-
-**Could Test:**
-- Error recovery paths
-- Performance with large datasets
-- Concurrent request handling
-
-### Frontend Priority Areas
-
-**Must Test:**
-- `lib/providers/job_provider.dart` - State management
-  - Status transitions (idle → loading → success/error)
-  - Notifier behavior (listeners called at right time)
-  - Null safety (Job?, error handling)
-  - BUG FIX: createJob returns Job? not bool
-
-- `lib/services/job_service.dart` - API integration
-  - HTTP call success and error paths
-  - Response parsing (JSON → Job objects)
-  - Field mapping (snake_case → camelCase)
-  - Null safety handling
-
-- `lib/models/job.dart` - Data models
-  - fromJson parsing (both old and new API formats)
-  - Null coalescing for optional fields
-  - Type conversion (string → int, etc.)
-
-**Should Test:**
-- `lib/screens/jobs/create_job_screen.dart` - Critical flow
-  - Job creation (returns Job?)
-  - Technician assignment after creation (separate call)
-  - Form validation
-  - Error display
-
-- Widgets for interaction and layout
-
-**Could Test:**
-- Navigation flows
-- Complex animations
-- Theme switching
-
----
-
-## Testing Challenges & Notes
-
-### Backend
-
-- **Database State:** Tests need real database or transaction rollback for isolation
-- **Timezone Handling:** Tests must validate date format preservation (critical bug area)
-- **Concurrency:** Difficult to test race conditions without load tooling
-- **Async Patterns:** Proper await/promise handling essential
-
-### Frontend
-
-- **Provider State:** Must test both sync (getters) and async (Future) state changes
-- **Navigation:** Flutter routing requires Navigator mocking
-- **Permissions:** Location, camera features need platform-specific mocking
-- **Null Safety:** Dart's strong null checking makes many bugs compile-time errors
-
----
-
-## Quick Setup (If Implementing)
-
-### Backend (Node.js)
-
-```bash
-npm install --save-dev jest @types/jest supertest
-
-# Create jest.config.js
-echo "module.exports = { testEnvironment: 'node' };" > jest.config.js
-
-# Add to package.json
-"test": "jest",
-"test:watch": "jest --watch",
-"test:coverage": "jest --coverage"
+  createConflictingJob: () => ({
+    ...createValidJobData(),
+    scheduled_date: '2026-03-25',
+    scheduled_time_start: '10:00:00', // Overlaps
+    scheduled_time_end: '12:00:00'
+  })
+};
 ```
 
-### Frontend (Flutter)
+Dart fixtures in `test/fixtures/job_fixtures.dart`:
+```dart
+final testJob1 = Job(
+  id: 1,
+  jobNumber: 'JOB-2026-0001',
+  jobType: 'installation',
+  customerName: 'John Doe',
+  customerPhone: '555-1234',
+  customerAddress: '123 Main St',
+  destinationLat: 40.7128,
+  destinationLng: -74.0060,
+  description: 'Install new equipment',
+  scheduledDate: DateTime(2026, 3, 25),
+  scheduledTimeStart: '09:00:00',
+  scheduledTimeEnd: '11:00:00',
+  estimatedDurationMinutes: 120,
+  currentStatus: 'pending',
+  priority: 'normal',
+  createdBy: 1,
+  createdAt: DateTime.now(),
+  updatedAt: DateTime.now(),
+  technicians: [
+    JobTechnician(id: 2, fullName: 'Alice'),
+    JobTechnician(id: 3, fullName: 'Bob'),
+  ],
+);
 
+final testJob2 = testJob1.copyWith(
+  id: 2,
+  jobNumber: 'JOB-2026-0002',
+  currentStatus: 'assigned',
+);
+```
+
+**Location:**
+- JavaScript: `test/fixtures/[domain].js` (job fixtures, vehicle fixtures, user fixtures)
+- Dart: `test/fixtures/[domain]_fixtures.dart`
+
+## Coverage
+
+**Requirements:** None enforced currently
+
+**Recommended Coverage Targets:**
+- Unit tests: 80% coverage for business logic
+- Integration tests: Key user flows (create job → assign → update status)
+- E2E tests: Critical paths only (create job and view results)
+
+**View Coverage (Once Configured):**
+
+JavaScript (Jest):
 ```bash
-# Tests run built-in:
-flutter test
+npm run test:coverage
+# View coverage in: coverage/lcov-report/index.html
+```
 
-# Watch mode:
-flutter test --watch
-
-# Coverage:
+Dart (Flutter):
+```bash
 flutter test --coverage
+# View coverage in: coverage/lcov.info
+```
 
-# Install testing dependencies (if needed):
-flutter pub add dev:mocktail
+## Test Types
+
+**Unit Tests:**
+- **Scope:** Individual functions/methods in isolation
+- **Approach:** Mock all external dependencies (database, services)
+- **Examples to write:**
+  - `Job._formatDateOnly()` handles Date objects, plain strings, null values
+  - `Job._parseTechnicians()` converts GROUP_CONCAT format to array
+  - `AuthController._normaliseRole()` maps legacy roles to current names
+  - `JobService._parseJobList()` handles null, empty, and valid JSON arrays
+  - Validation functions reject invalid inputs and accept valid ones
+
+**Integration Tests:**
+- **Scope:** Multiple modules working together (Model + Service, or Service + Database)
+- **Approach:** Use real database connection (test DB) or advanced mocking
+- **Examples to write:**
+  - Create job → verify job appears in getAllJobs
+  - Create job → assign technicians → verify technicians_json populated
+  - Assign technician → remove from conflicting job → verify removed from first job
+  - Update job status → verify status persists through getJobById
+  - Role-based access control: admin can delete, technician cannot
+
+**E2E Tests:**
+- **Scope:** Full user workflow through HTTP API
+- **Approach:** Real server, real database (test instance), client library
+- **Examples to write:**
+  - POST /api/auth/login → returns valid JWT
+  - GET /api/jobs (with JWT) → returns correct jobs for role
+  - POST /api/jobs → PUT /api/job-assignments/:id/technicians → GET /api/jobs/:id → verify technicians assigned
+  - Unauthenticated requests return 401
+  - Unauthorized role requests return 403
+
+## Common Patterns
+
+**Async Testing:**
+
+JavaScript (Jest):
+```javascript
+it('should wait for async operation', async () => {
+  const result = await Job.createJob(validData);
+  expect(result.id).toBeDefined();
+});
+
+// Or with done callback (deprecated but may see):
+it('completes', (done) => {
+  Job.createJob(validData).then(result => {
+    expect(result.id).toBeDefined();
+    done();
+  });
+});
+```
+
+Dart (Flutter):
+```dart
+test('async operation completes', () async {
+  final job = await jobService.createJob(...);
+  expect(job.id, isNotNull);
+});
+
+// With timeout
+test('operation completes within timeout', () async {
+  final result = await jobService.createJob(...)
+    .timeout(Duration(seconds: 5));
+  expect(result.id, isNotNull);
+}, timeout: Timeout(Duration(seconds: 10)));
+```
+
+**Error Testing:**
+
+JavaScript (Jest):
+```javascript
+it('throws specific error for duplicate entry', async () => {
+  // Set up duplicate scenario
+  await Job.createJob(data1);
+
+  // Second call with same unique field should fail
+  await expect(Job.createJob(data1))
+    .rejects
+    .toThrow('Job number already exists');
+});
+
+it('catches MySQL error and re-throws', async () => {
+  db.query.mockRejectedValue({
+    code: 'ER_NO_REFERENCED_ROW_2',
+    message: 'Foreign key constraint fails'
+  });
+
+  await expect(Job.createJob(invalidData))
+    .rejects
+    .toThrow('Invalid user ID - creator does not exist');
+});
+```
+
+Dart (Flutter):
+```dart
+test('throws error on invalid input', () async {
+  expect(
+    () => Job.fromJson({'id': 'not-a-number'}),
+    returnsNormally, // Job handles gracefully
+  );
+});
+
+test('error message is preserved in provider', () async {
+  // Mock service to throw
+  when(() => mockJobService.getAllJobs())
+    .thenThrow(Exception('Network error'));
+
+  await provider.loadJobs();
+
+  expect(provider.error, contains('Network error'));
+  expect(provider.status, JobStatus.error);
+});
+```
+
+**State Transitions (Providers):**
+
+Dart:
+```dart
+test('status transitions through load cycle', () async {
+  expect(provider.status, JobStatus.idle);
+
+  final future = provider.loadJobs();
+  // Note: immediately after call but before await
+  expect(provider.status, JobStatus.loading);
+
+  await future;
+  expect(provider.status, JobStatus.success);
+});
+```
+
+**Date/Time Testing:**
+
+JavaScript:
+```javascript
+it('formats dates without timezone shift', () => {
+  // MySQL returns: Date object representing 2026-02-23
+  const date = new Date('2026-02-23');
+  const formatted = Job._formatDateOnly(date);
+
+  // Must always be '2026-02-23', never shifted to 22nd
+  expect(formatted).toBe('2026-02-23');
+});
+
+it('handles different date input formats', () => {
+  expect(Job._formatDateOnly('2026-02-23')).toBe('2026-02-23');
+  expect(Job._formatDateOnly(new Date('2026-02-23'))).toBe('2026-02-23');
+  expect(Job._formatDateOnly(null)).toBe(null);
+});
+```
+
+Dart:
+```dart
+test('parses date string to DateTime', () {
+  final job = Job.fromJson({
+    'scheduled_date': '2026-03-25',
+    ...otherFields
+  });
+
+  expect(job.scheduledDate.year, 2026);
+  expect(job.scheduledDate.month, 3);
+  expect(job.scheduledDate.day, 25);
+});
 ```
 
 ---
 
 *Testing analysis: 2026-03-21*
+
+**Note:** This codebase currently has no test files or test framework configured. These patterns are derived from industry best practices and the structure visible in the source code (clear separation of concerns, explicit error handling, state management) which indicates the code is structured to be testable.
