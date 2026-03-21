@@ -13,6 +13,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/models/user.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
@@ -252,8 +253,8 @@ class _UsersScreenState extends State<UsersScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
-    // Non-admins shouldn't reach this screen, but safety net
-    if (!auth.isAdmin) {
+    // Users without read permission shouldn't reach this screen, but safety net
+    if (!auth.hasPermission('users:read')) {
       return Scaffold(
         appBar: AppBar(title: const Text('Users')),
         body: const Center(
@@ -263,7 +264,7 @@ class _UsersScreenState extends State<UsersScreen> {
               Icon(Icons.lock_outline, size: 60, color: AppTheme.textHint),
               SizedBox(height: 16),
               Text(
-                'Admin access required.',
+                'Access restricted.',
                 style: TextStyle(color: AppTheme.textSecondary),
               ),
             ],
@@ -359,17 +360,21 @@ class _UsersScreenState extends State<UsersScreen> {
                         onToggleActive: () => _toggleActive(filtered[i]),
                         onResetPassword: () => _resetPassword(filtered[i]),
                         isSelf: auth.user?.id == filtered[i].id,
+                        canUpdate: auth.hasPermission('users:update'),
+                        canDelete: auth.hasPermission('users:delete'),
                       ),
                     ),
                   ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.person_add_outlined),
-        label: const Text('Add User'),
-      ),
+      floatingActionButton: auth.hasPermission('users:create')
+          ? FloatingActionButton.extended(
+              onPressed: () => _openForm(),
+              icon: const Icon(Icons.person_add_outlined),
+              label: const Text('Add User'),
+            )
+          : null,
     );
   }
 
@@ -453,6 +458,8 @@ class _UserCard extends StatelessWidget {
   final VoidCallback onToggleActive;
   final VoidCallback onResetPassword;
   final bool isSelf;
+  final bool canUpdate;
+  final bool canDelete;
 
   const _UserCard({
     required this.user,
@@ -463,6 +470,8 @@ class _UserCard extends StatelessWidget {
     required this.onToggleActive,
     required this.onResetPassword,
     required this.isSelf,
+    required this.canUpdate,
+    required this.canDelete,
   });
 
   @override
@@ -579,6 +588,60 @@ class _UserCard extends StatelessWidget {
                           color: AppTheme.textSecondary,
                         ),
                       ),
+                      if (user.contactPhone != null &&
+                          user.contactPhone!.isNotEmpty) ...[
+                        const SizedBox(height: 3),
+                        InkWell(
+                          onTap: () => launchUrl(
+                            Uri.parse('tel:${user.contactPhone}'),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.phone,
+                                size: 14,
+                                color: Colors.blue,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                user.contactPhone!,
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (user.contactPhoneSecondary != null &&
+                          user.contactPhoneSecondary!.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        InkWell(
+                          onTap: () => launchUrl(
+                            Uri.parse('tel:${user.contactPhoneSecondary}'),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.phone_android,
+                                size: 14,
+                                color: Colors.blue,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                user.contactPhoneSecondary!,
+                                style: const TextStyle(
+                                  color: Colors.blue,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       if (!isActive) ...[
                         const SizedBox(height: 4),
                         const Row(
@@ -612,16 +675,17 @@ class _UserCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // Reset password
-                _actionBtn(
-                  icon: Icons.lock_reset_outlined,
-                  label: 'Password',
-                  color: AppTheme.textSecondary,
-                  onPressed: onResetPassword,
-                ),
+                // Reset password (requires update permission)
+                if (canUpdate)
+                  _actionBtn(
+                    icon: Icons.lock_reset_outlined,
+                    label: 'Password',
+                    color: AppTheme.textSecondary,
+                    onPressed: onResetPassword,
+                  ),
 
-                // Activate / Deactivate (not self)
-                if (!isSelf)
+                // Activate / Deactivate (not self, requires delete permission)
+                if (!isSelf && canDelete)
                   _actionBtn(
                     icon: isActive
                         ? Icons.person_off_outlined
@@ -633,13 +697,14 @@ class _UserCard extends StatelessWidget {
                     onPressed: onToggleActive,
                   ),
 
-                // Edit
-                _actionBtn(
-                  icon: Icons.edit_outlined,
-                  label: 'Edit',
-                  color: AppTheme.primaryColor,
-                  onPressed: onEdit,
-                ),
+                // Edit (requires update permission)
+                if (canUpdate)
+                  _actionBtn(
+                    icon: Icons.edit_outlined,
+                    label: 'Edit',
+                    color: AppTheme.primaryColor,
+                    onPressed: onEdit,
+                  ),
               ],
             ),
           ],
@@ -686,6 +751,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
   final _emailCtrl = TextEditingController();
   final _passCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _phoneSecondaryCtrl = TextEditingController();
 
   String _role = 'technician';
   bool _isActive = true;
@@ -707,6 +774,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       _emailCtrl.text = u.email;
       _role = u.role;
       _isActive = u.isActive;
+      _phoneCtrl.text = u.contactPhone ?? '';
+      _phoneSecondaryCtrl.text = u.contactPhoneSecondary ?? '';
     }
   }
 
@@ -717,6 +786,8 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     _emailCtrl.dispose();
     _passCtrl.dispose();
     _confirmCtrl.dispose();
+    _phoneCtrl.dispose();
+    _phoneSecondaryCtrl.dispose();
     super.dispose();
   }
 
@@ -730,13 +801,26 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     try {
       if (_isEditing) {
         // Update profile fields
-        await widget.service.updateUser(widget.user!.id, {
+        final updates = <String, dynamic>{
           'username': _usernameCtrl.text.trim(),
           'full_name': _nameCtrl.text.trim(),
           'email': _emailCtrl.text.trim().toLowerCase(),
           'role': _role,
           'is_active': _isActive ? 1 : 0,
-        });
+        };
+        // Include phone fields if they changed
+        if (_phoneCtrl.text != (widget.user!.contactPhone ?? '')) {
+          updates['contact_phone'] =
+              _phoneCtrl.text.isEmpty ? null : _phoneCtrl.text;
+        }
+        if (_phoneSecondaryCtrl.text !=
+            (widget.user!.contactPhoneSecondary ?? '')) {
+          updates['contact_phone_secondary'] =
+              _phoneSecondaryCtrl.text.isEmpty
+                  ? null
+                  : _phoneSecondaryCtrl.text;
+        }
+        await widget.service.updateUser(widget.user!.id, updates);
         // Also update password if the admin entered a new one
         if (_changePassword && _passCtrl.text.isNotEmpty) {
           await widget.service.resetPassword(widget.user!.id, _passCtrl.text);
@@ -749,6 +833,10 @@ class _UserFormSheetState extends State<_UserFormSheet> {
           password: _passCtrl.text,
           role: _role,
           isActive: _isActive,
+          contactPhone: _phoneCtrl.text.isNotEmpty ? _phoneCtrl.text : null,
+          contactPhoneSecondary: _phoneSecondaryCtrl.text.isNotEmpty
+              ? _phoneSecondaryCtrl.text
+              : null,
         );
       }
       if (mounted) Navigator.pop(context, true);
@@ -834,6 +922,40 @@ class _UserFormSheetState extends State<_UserFormSheet> {
                 validator: (v) {
                   if (v == null || v.trim().isEmpty) return 'Email is required';
                   if (!v.contains('@')) return 'Enter a valid email';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Contact Phone (Primary)
+              _field(
+                ctrl: _phoneCtrl,
+                label: 'Contact Phone (Primary)',
+                icon: Icons.phone,
+                inputType: TextInputType.phone,
+                hint: '+268 7X XXX XXXX',
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final regex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
+                    if (!regex.hasMatch(v)) return 'Invalid phone number';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 12),
+
+              // Contact Phone (Secondary)
+              _field(
+                ctrl: _phoneSecondaryCtrl,
+                label: 'Contact Phone (Secondary)',
+                icon: Icons.phone_android,
+                inputType: TextInputType.phone,
+                hint: '+268 7X XXX XXXX',
+                validator: (v) {
+                  if (v != null && v.isNotEmpty) {
+                    final regex = RegExp(r'^\+?[\d\s\-\(\)]{7,20}$');
+                    if (!regex.hasMatch(v)) return 'Invalid phone number';
+                  }
                   return null;
                 },
               ),
@@ -1129,6 +1251,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
     TextInputType inputType = TextInputType.text,
     bool obscure = false,
     Widget? suffix,
+    String? hint,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
@@ -1138,6 +1261,7 @@ class _UserFormSheetState extends State<_UserFormSheet> {
       validator: validator,
       decoration: InputDecoration(
         labelText: label,
+        hintText: hint,
         prefixIcon: Icon(icon),
         suffixIcon: suffix,
         filled: true,
