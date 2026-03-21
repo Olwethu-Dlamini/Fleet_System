@@ -50,10 +50,10 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Job Status Automation (STAT)
 
-- [ ] **STAT-01**: Jobs auto-transition to "in progress" when scheduled start time arrives (cron-based)
-- [ ] **STAT-02**: "Complete" button only available to assigned driver or technician
-- [ ] **STAT-03**: GPS coordinates captured automatically when "complete job" is tapped
-- [ ] **STAT-04**: Completion location stored in `job_completions` table with timestamp
+- [x] **STAT-01**: Jobs auto-transition to "in progress" when scheduled start time arrives (cron-based)
+- [x] **STAT-02**: "Complete" button only available to assigned driver or technician
+- [x] **STAT-03**: GPS coordinates captured automatically when "complete job" is tapped
+- [x] **STAT-04**: Completion location stored in `job_completions` table with timestamp
 
 ### Vehicle Maintenance (MAINT)
 

@@ -10,7 +10,7 @@
 |-------|------|-------------|------|--------------|
 | 1 | Foundation & Security Hardening | 5/5 | Complete    | 2026-03-21 |
 | 2 | User, Vehicle & Scheduler Enhancements | 3/3 | Complete   | 2026-03-21 |
-| 3 | Job Assignment & Status Automation | 1/3 | In Progress|  |
+| 3 | Job Assignment & Status Automation | 2/3 | In Progress|  |
 | 4 | Dashboard & Views | DASH-01–04 | LOW | Phase 2 (scheduler role), Phase 3 (job counts) |
 | 5 | Notifications & Alerts | NOTIF-01–07 | MEDIUM | Phase 1 (foundation), Phase 3 (status automation) |
 | 6 | Time Management | TIME-01–07 | HIGH | Phase 5 (notifications), Phase 3 (assignment) |
@@ -113,11 +113,11 @@ Plans:
 - [ ] Only assigned personnel can mark jobs complete
 - [ ] Completion records include GPS coordinates
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 - [x] 03-01-PLAN.md — DB migration (assignment_history, job_completions, nullable changed_by) + driver load stats endpoint + assignment history logging
-- [ ] 03-02-PLAN.md — Cron auto-transition service + job completion endpoint with personnel auth and GPS storage
+- [x] 03-02-PLAN.md — Cron auto-transition service + job completion endpoint with personnel auth and GPS storage
 - [ ] 03-03-PLAN.md — Flutter UI: driver load picker with green glow/suggested chip, technician chips, completion flow with GPS capture
 
 ---
