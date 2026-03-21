@@ -6,7 +6,8 @@
 const jwt                    = require('jsonwebtoken');
 const { USER_ROLE, PERMISSIONS } = require('../config/constants');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'vehicle_scheduling_secret_2024';
+const JWT_SECRET = process.env.JWT_SECRET;
+// Note: startup guard in server.js ensures JWT_SECRET is always set at runtime
 
 // ============================================
 // VERIFY TOKEN

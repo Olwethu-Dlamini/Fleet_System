@@ -2,21 +2,31 @@
 // FILE: src/server.js
 // ============================================
 require('dotenv').config();
+
+// FOUND-04: Fail fast — crash if JWT_SECRET is not configured
+// Never run with a fallback secret in any environment
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Server will not start.');
+  process.exit(1);
+}
+
 const express = require('express');
 const cors    = require('cors');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
+const helmet  = require('helmet');
 
 const db         = require('./config/database');
 const routes     = require('./routes');
 const swaggerUi  = require('swagger-ui-express');
 const swaggerSpec = require('./config/swagger');
 const { USER_ROLE, PERMISSIONS } = require('./config/constants');
+const { apiLimiter, loginLimiter } = require('./middleware/rateLimiter');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-const JWT_SECRET  = process.env.JWT_SECRET  || 'vehicle_scheduling_secret_2024';
+const JWT_SECRET  = process.env.JWT_SECRET;
 const JWT_EXPIRES = process.env.JWT_EXPIRES || '8h';
 
 // ============================================
@@ -44,6 +54,8 @@ function getPermissionsForRole(role) {
 // ======================
 // MIDDLEWARE
 // ======================
+
+// 1. CORS — must come before helmet (helmet sets headers that CORS pre-flight needs to not conflict with)
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin) return callback(null, true);
@@ -59,8 +71,15 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
 }));
 
+// 2. Body parsers
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// 3. Security headers — ONLY on /api routes (NOT /swagger — Pitfall 2: helmet CSP blocks Swagger inline scripts)
+app.use('/api', helmet());
+
+// 4. General API rate limit — 200 req/IP/15min
+app.use('/api', apiLimiter);
 
 // ======================
 // SWAGGER
@@ -76,7 +95,7 @@ app.get('/swagger.json', (req, res) => {
 // ======================
 
 // POST /api/auth/login
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', loginLimiter, async (req, res) => {
   try {
     const { username, password } = req.body;
 
@@ -88,7 +107,7 @@ app.post('/api/auth/login', async (req, res) => {
     }
 
     const [rows] = await db.query(
-      'SELECT * FROM users WHERE username = ? AND is_active = 1',
+      'SELECT id, username, password_hash, role, email, full_name, tenant_id FROM users WHERE username = ? AND is_active = 1',
       [username]
     );
 
@@ -107,7 +126,14 @@ app.post('/api/auth/login', async (req, res) => {
     const userPermissions = getPermissionsForRole(normalisedRole);
 
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: normalisedRole, email: user.email },
+      {
+        id        : user.id,
+        username  : user.username,
+        role      : normalisedRole,
+        email     : user.email,
+        tenant_id : user.tenant_id,   // Required for all downstream tenant-scoped queries
+        permissions: userPermissions,
+      },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES }
     );
@@ -120,9 +146,9 @@ app.post('/api/auth/login', async (req, res) => {
         id         : user.id,
         username   : user.username,
         full_name  : user.full_name,
-        role       : normalisedRole,        // ← "admin" | "scheduler" | "technician"
+        role       : normalisedRole,        // <- "admin" | "scheduler" | "technician"
         email      : user.email,
-        permissions: userPermissions,       // ← e.g. ["jobs:read", "jobs:create", ...]
+        permissions: userPermissions,       // <- e.g. ["jobs:read", "jobs:create", ...]
       },
     });
 
@@ -206,21 +232,21 @@ app.use((err, req, res, next) => {
 (async () => {
   try {
     await db.query('SELECT 1 as test');
-    console.log('✅ Database connection successful');
+    console.log('Database connection successful');
 
     app.listen(PORT, () => {
       console.log('\n' + '='.repeat(50));
-      console.log('🚀 Vehicle Scheduling API');
+      console.log('Vehicle Scheduling API');
       console.log('='.repeat(50));
-      console.log(`📡 Server:  http://localhost:${PORT}`);
-      console.log(`🔗 API:     http://localhost:${PORT}/api`);
-      console.log(`🔐 Login:   POST http://localhost:${PORT}/api/auth/login`);
+      console.log(`Server:  http://localhost:${PORT}`);
+      console.log(`API:     http://localhost:${PORT}/api`);
+      console.log(`Login:   POST http://localhost:${PORT}/api/auth/login`);
       console.log('='.repeat(50) + '\n');
       console.log('Roles:  admin | scheduler | technician');
       console.log('='.repeat(50) + '\n');
     });
   } catch (err) {
-    console.error('❌ Database connection failed:', err.message);
+    console.error('Database connection failed:', err.message);
     process.exit(1);
   }
 })();
