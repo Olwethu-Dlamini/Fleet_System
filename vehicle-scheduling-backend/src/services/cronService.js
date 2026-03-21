@@ -7,6 +7,7 @@
 const cron = require('node-cron');
 const db = require('../config/database');
 const JobStatusService = require('./jobStatusService');
+const NotificationService = require('./notificationService');
 const logger = require('../config/logger').child({ service: 'cronService' });
 
 /**
@@ -45,7 +46,34 @@ function startCronJobs() {
     }
   });
 
-  logger.info('Cron jobs started (auto-transition every 1 minute)');
+  // NOTIF-02: Check for jobs starting in ~15 minutes (every minute)
+  cron.schedule('* * * * *', async () => {
+    try {
+      await NotificationService.checkUpcomingJobs();
+    } catch (err) {
+      logger.error({ err }, 'Cron notification check (upcoming) error');
+    }
+  });
+
+  // NOTIF-03: Check for overdue jobs (every minute)
+  cron.schedule('* * * * *', async () => {
+    try {
+      await NotificationService.checkOverdueJobs();
+    } catch (err) {
+      logger.error({ err }, 'Cron notification check (overdue) error');
+    }
+  });
+
+  // 30-day retention cleanup (daily at 3 AM)
+  cron.schedule('0 3 * * *', async () => {
+    try {
+      await NotificationService.cleanOldNotifications();
+    } catch (err) {
+      logger.error({ err }, 'Cron notification cleanup error');
+    }
+  });
+
+  logger.info('Cron jobs started (auto-transition + notification checks every 1 minute, cleanup daily 3AM)');
 }
 
 module.exports = { startCronJobs };
