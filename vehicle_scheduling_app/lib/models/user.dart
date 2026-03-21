@@ -8,6 +8,7 @@
 //   • isScheduler kept as-is     (role == 'scheduler', legacy DB rows)
 //   • Added 'dispatcher' case to roleDisplayName
 //   • hasPermission() unchanged — checks server-returned permissions list
+//   • Added contactPhone and contactPhoneSecondary fields (USR-01/02/03)
 // ============================================
 
 class User {
@@ -23,6 +24,10 @@ class User {
   /// Use [hasPermission] instead of checking [role] directly in the UI.
   final List<String> permissions;
 
+  /// Contact phone numbers (optional) — parsed from API contact_phone fields.
+  final String? contactPhone;
+  final String? contactPhoneSecondary;
+
   const User({
     required this.id,
     required this.username,
@@ -31,6 +36,8 @@ class User {
     required this.email,
     this.isActive = true,
     this.permissions = const [],
+    this.contactPhone,
+    this.contactPhoneSecondary,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -46,6 +53,8 @@ class User {
               ?.map((e) => e as String)
               .toList() ??
           const [],
+      contactPhone: json['contact_phone'] as String?,
+      contactPhoneSecondary: json['contact_phone_secondary'] as String?,
     );
   }
 
@@ -84,6 +93,8 @@ class User {
     String? email,
     bool? isActive,
     List<String>? permissions,
+    String? contactPhone,
+    String? contactPhoneSecondary,
   }) {
     return User(
       id: id ?? this.id,
@@ -93,6 +104,9 @@ class User {
       email: email ?? this.email,
       isActive: isActive ?? this.isActive,
       permissions: permissions ?? this.permissions,
+      contactPhone: contactPhone ?? this.contactPhone,
+      contactPhoneSecondary:
+          contactPhoneSecondary ?? this.contactPhoneSecondary,
     );
   }
 }

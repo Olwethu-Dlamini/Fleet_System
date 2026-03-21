@@ -49,18 +49,24 @@ class UserService {
     required String password,
     required String role, // 'admin' | 'scheduler' | 'technician'
     bool isActive = true,
+    String? contactPhone,
+    String? contactPhoneSecondary,
   }) async {
-    final response = await apiService.post(
-      _endpoint,
-      data: {
-        'username': username.trim(),
-        'full_name': fullName.trim(),
-        'email': email.trim().toLowerCase(),
-        'password': password,
-        'role': role,
-        'is_active': isActive ? 1 : 0,
-      },
-    );
+    final data = <String, dynamic>{
+      'username': username.trim(),
+      'full_name': fullName.trim(),
+      'email': email.trim().toLowerCase(),
+      'password': password,
+      'role': role,
+      'is_active': isActive ? 1 : 0,
+    };
+    if (contactPhone != null && contactPhone.isNotEmpty) {
+      data['contact_phone'] = contactPhone;
+    }
+    if (contactPhoneSecondary != null && contactPhoneSecondary.isNotEmpty) {
+      data['contact_phone_secondary'] = contactPhoneSecondary;
+    }
+    final response = await apiService.post(_endpoint, data: data);
     if (response['success'] == true && response['user'] != null) {
       return User.fromJson(response['user']);
     }
