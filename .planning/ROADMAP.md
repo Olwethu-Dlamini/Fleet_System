@@ -9,7 +9,7 @@
 | Phase | Name | Requirements | Risk | Dependencies |
 |-------|------|-------------|------|--------------|
 | 1 | Foundation & Security Hardening | 5/5 | Complete    | 2026-03-21 |
-| 2 | User, Vehicle & Scheduler Enhancements | 2/3 | In Progress|  |
+| 2 | User, Vehicle & Scheduler Enhancements | 3/3 | Complete   | 2026-03-21 |
 | 3 | Job Assignment & Status Automation | ASGN-01–05, STAT-01–04 | MEDIUM | Phase 1 (race condition fixes) |
 | 4 | Dashboard & Views | DASH-01–04 | LOW | Phase 2 (scheduler role), Phase 3 (job counts) |
 | 5 | Notifications & Alerts | NOTIF-01–07 | MEDIUM | Phase 1 (foundation), Phase 3 (status automation) |
@@ -79,12 +79,12 @@ Plans:
 - [ ] Scheduler can do everything admin can EXCEPT add/remove vehicles and users
 - [ ] Scheduler can swap vehicles on jobs
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md — Backend schema migration + all new/extended API routes (contacts, maintenance CRUD, settings, swap-vehicle)
 - [x] 02-02-PLAN.md — Flutter user screens: contact phone fields, tap-to-call, permission-based UI gating
-- [ ] 02-03-PLAN.md — Flutter vehicle screens: maintenance UI, maintenance badge, admin settings toggle, permission gating
+- [x] 02-03-PLAN.md — Flutter vehicle screens: maintenance UI, maintenance badge, admin settings toggle, permission gating
 
 ---
 
