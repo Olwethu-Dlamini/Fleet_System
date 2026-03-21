@@ -40,6 +40,7 @@ class JobProvider extends ChangeNotifier {
 
   String? _statusFilter;
   String? _typeFilter;
+  bool _weekendFilter = false;
 
   // ==========================================
   // GETTERS
@@ -52,13 +53,17 @@ class JobProvider extends ChangeNotifier {
   bool get isLoading => _status == JobStatus.loading;
   String? get statusFilter => _statusFilter;
   String? get typeFilter => _typeFilter;
+  bool get weekendFilter => _weekendFilter;
 
   List<Job> get _filteredJobs {
     return _jobs.where((job) {
       final matchesStatus =
           _statusFilter == null || job.currentStatus == _statusFilter;
       final matchesType = _typeFilter == null || job.jobType == _typeFilter;
-      return matchesStatus && matchesType;
+      final matchesWeekend = !_weekendFilter ||
+          job.scheduledDate.weekday == DateTime.saturday ||
+          job.scheduledDate.weekday == DateTime.sunday;
+      return matchesStatus && matchesType && matchesWeekend;
     }).toList();
   }
 
@@ -448,9 +453,15 @@ class JobProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setWeekendFilter(bool value) {
+    _weekendFilter = value;
+    notifyListeners();
+  }
+
   void clearFilters() {
     _statusFilter = null;
     _typeFilter = null;
+    _weekendFilter = false;
     notifyListeners();
   }
 

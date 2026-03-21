@@ -86,6 +86,24 @@ class _JobsListScreenState extends State<JobsListScreen> {
                 ),
               ],
             ),
+          // DASH-02: Weekend filter toggle (admin/scheduler only)
+          if (!auth.isTechnician)
+            IconButton(
+              icon: Icon(
+                Icons.weekend_outlined,
+                color: jobProvider.weekendFilter
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+              tooltip: jobProvider.weekendFilter
+                  ? 'Show all jobs'
+                  : 'Show weekend jobs only',
+              onPressed: () {
+                context
+                    .read<JobProvider>()
+                    .setWeekendFilter(!jobProvider.weekendFilter);
+              },
+            ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _refreshJobs),
         ],
       ),
@@ -117,6 +135,30 @@ class _JobsListScreenState extends State<JobsListScreen> {
                       color: AppTheme.primaryColor,
                       size: 18,
                     ),
+                  ),
+                ],
+              ),
+            ),
+
+          // DASH-02: Weekend filter active indicator
+          if (!auth.isTechnician && jobProvider.weekendFilter)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: Row(
+                children: [
+                  const Icon(Icons.weekend, size: 16),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Showing weekend jobs only',
+                    style: TextStyle(fontSize: 13),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () =>
+                        context.read<JobProvider>().setWeekendFilter(false),
+                    child: const Icon(Icons.close, size: 16),
                   ),
                 ],
               ),
