@@ -140,6 +140,8 @@ class Job {
         customer_name,
         customer_phone = null,
         customer_address,
+        destination_lat = null, // ← NEW
+        destination_lng = null, // ← NEW
         job_type,
         description = null,
         scheduled_date,
@@ -163,6 +165,8 @@ class Job {
           customer_name,
           customer_phone,
           customer_address,
+          destination_lat,
+          destination_lng,
           description,
           scheduled_date,
           scheduled_time_start,
@@ -170,7 +174,7 @@ class Job {
           estimated_duration_minutes,
           priority,
           created_by
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
 
       // Execute INSERT query
@@ -180,6 +184,8 @@ class Job {
         customer_name,
         customer_phone,
         customer_address,
+        destination_lat,
+        destination_lng,
         description,
         scheduled_date,
         scheduled_time_start,
@@ -237,6 +243,8 @@ class Job {
         'customer_name',
         'customer_phone',
         'customer_address',
+        'destination_lat', // ← NEW
+        'destination_lng', // ← NEW
         'job_type',
         'description',
         'scheduled_date',
@@ -316,6 +324,8 @@ class Job {
           j.customer_name,
           j.customer_phone,
           j.customer_address,
+          j.destination_lat, -- ← NEW
+          j.destination_lng, -- ← NEW
           j.description,
           j.scheduled_date,
           j.scheduled_time_start,
@@ -387,6 +397,8 @@ class Job {
           j.customer_name,
           j.customer_phone,
           j.customer_address,
+          j.destination_lat,
+          j.destination_lng,
           j.description,
           j.scheduled_date,
           j.scheduled_time_start,
@@ -459,6 +471,8 @@ class Job {
           j.customer_name,
           j.customer_phone,
           j.customer_address,
+          j.destination_lat, -- ← NEW
+          j.destination_lng, -- ← NEW
           j.description,
           j.scheduled_date,
           j.scheduled_time_start,
@@ -524,6 +538,8 @@ class Job {
           j.customer_name,
           j.customer_phone,
           j.customer_address,
+          j.destination_lat,
+          j.destination_lng,
           j.description,
           j.scheduled_date,
           j.scheduled_time_start,
@@ -598,6 +614,8 @@ class Job {
           j.customer_name,
           j.customer_phone,
           j.customer_address,
+          j.destination_lat,
+          j.destination_lng,
           j.description,
           j.scheduled_date,
           j.scheduled_time_start,
@@ -790,34 +808,29 @@ class Job {
   // ==========================================
   static async generateJobNumber() {
     try {
-      // Get current year
       const year = new Date().getFullYear();
 
-      // Get the highest job number for this year
-      const sql = `
-        SELECT job_number 
-        FROM jobs 
-        WHERE job_number LIKE ?
-        ORDER BY job_number DESC 
-        LIMIT 1
-      `;
+      // Ensure a row exists for the current year.
+      // INSERT IGNORE is a no-op if the row already exists (unique key on year).
+      // This handles the January 1st year-rollover edge case automatically.
+      await db.query(
+        `INSERT IGNORE INTO job_number_sequences (year, counter) VALUES (?, 0)`,
+        [year]
+      );
 
-      const [rows] = await db.query(sql, [`JOB-${year}-%`]);
+      // Atomic increment using the LAST_INSERT_ID(expr) trick:
+      // MySQL/MariaDB stores the expression result as the connection's last insert ID.
+      // No two connections can receive the same counter value — this is guaranteed atomic.
+      await db.query(
+        `UPDATE job_number_sequences SET counter = LAST_INSERT_ID(counter + 1) WHERE year = ?`,
+        [year]
+      );
 
-      let nextNumber = 1;
+      // Retrieve the value we just set (same connection context via pool)
+      const [[seq]] = await db.query(`SELECT LAST_INSERT_ID() AS counter`);
 
-      if (rows.length > 0) {
-        // Extract number from last job_number (e.g., 'JOB-2024-0042' → 42)
-        const lastJobNumber = rows[0].job_number;
-        const lastNumber    = parseInt(lastJobNumber.split('-')[2]);
-        nextNumber          = lastNumber + 1;
-      }
-
-      // Format as 4-digit number with leading zeros
-      const formattedNumber = String(nextNumber).padStart(4, '0');
-
-      // Return complete job number
-      return `JOB-${year}-${formattedNumber}`;
+      // Format: JOB-2026-0001
+      return `JOB-${year}-${String(seq.counter).padStart(4, '0')}`;
 
     } catch (error) {
       console.error('Error in Job.generateJobNumber:', error);
