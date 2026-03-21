@@ -4,6 +4,8 @@
 // LAYER: Controller Layer (HTTP handling)
 // ============================================
 const ReportsService = require('../services/reportsService');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'reports-controller' });
 
 /**
  * Reports Controller
@@ -41,7 +43,7 @@ class ReportsController {
         });
       }
       
-      console.log('📥 Jobs Per Vehicle report request');
+      log.info({ startDate, endDate, jobType }, 'Jobs per vehicle report request');
       
       // Generate report
       const report = await ReportsService.getJobsPerVehicle({
@@ -59,7 +61,7 @@ class ReportsController {
       });
       
     } catch (error) {
-      console.error('❌ Error in reports controller (jobs per vehicle):', error.message);
+      log.error({ err: error.message }, 'Error in reports controller (jobs per vehicle)');
       
       res.status(500).json({
         success: false,
@@ -95,7 +97,7 @@ class ReportsController {
         });
       }
       
-      console.log('📥 Vehicle utilization report request');
+      log.info({ startDate, endDate }, 'Vehicle utilization report request');
       
       const report = await ReportsService.getVehicleUtilization({
         startDate,
@@ -110,7 +112,7 @@ class ReportsController {
       });
       
     } catch (error) {
-      console.error('❌ Error in reports controller (utilization):', error.message);
+      log.error({ err: error.message }, 'Error in reports controller (utilization)');
       
       res.status(500).json({
         success: false,
@@ -147,7 +149,7 @@ class ReportsController {
         });
       }
       
-      console.log('📥 Jobs by service type report request');
+      log.info({ startDate, endDate }, 'Jobs by service type report request');
       
       const report = await ReportsService.getJobsByServiceType({
         startDate,
@@ -163,7 +165,7 @@ class ReportsController {
       });
       
     } catch (error) {
-      console.error('❌ Error in reports controller (jobs by type):', error.message);
+      log.error({ err: error.message }, 'Error in reports controller (jobs by type)');
       
       res.status(500).json({
         success: false,
@@ -200,7 +202,7 @@ class ReportsController {
         });
       }
       
-      console.log('📥 Completion analysis report request');
+      log.info({ startDate, endDate, jobType }, 'Completion analysis report request');
       
       const report = await ReportsService.getCompletionAnalysis({
         startDate,
@@ -216,7 +218,7 @@ class ReportsController {
       });
       
     } catch (error) {
-      console.error('❌ Error in reports controller (completion analysis):', error.message);
+      log.error({ err: error.message }, 'Error in reports controller (completion analysis)');
       
       res.status(500).json({
         success: false,
@@ -252,7 +254,7 @@ class ReportsController {
         });
       }
       
-      console.log('📥 Executive dashboard report request');
+      log.info({ startDate, endDate }, 'Executive dashboard report request');
       
       const dashboard = await ReportsService.getExecutiveDashboard({
         startDate,
@@ -267,7 +269,7 @@ class ReportsController {
       });
       
     } catch (error) {
-      console.error('❌ Error in reports controller (executive dashboard):', error.message);
+      log.error({ err: error.message }, 'Error in reports controller (executive dashboard)');
       
       res.status(500).json({
         success: false,
@@ -337,7 +339,7 @@ class ReportsController {
       });
       
     } catch (error) {
-      console.error('❌ Error in reports controller (quick stats):', error.message);
+      log.error({ err: error.message }, 'Error in reports controller (quick stats)');
       
       res.status(500).json({
         success: false,

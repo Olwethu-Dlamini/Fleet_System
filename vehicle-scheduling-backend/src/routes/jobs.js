@@ -19,6 +19,8 @@ const db                    = require('../config/database');
 const { verifyToken }       = require('../middleware/authMiddleware');
 const { body }              = require('express-validator');
 const validate              = require('../middleware/validate');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'jobs-route' });
 
 // ============================================
 // Validation schemas — FOUND-06
@@ -103,7 +105,7 @@ router.get('/', verifyToken, async (req, res) => {
 
     res.json({ success: true, jobs, count: jobs.length });
   } catch (error) {
-    console.error('GET /jobs error:', error);
+    log.error({ err: error }, 'GET /jobs error');
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -123,7 +125,7 @@ router.get('/my-jobs', verifyToken, async (req, res) => {
     const jobs = await Job.getJobsByTechnician(userId, filters);
     res.json({ success: true, jobs, count: jobs.length });
   } catch (error) {
-    console.error('GET /jobs/my-jobs error:', error);
+    log.error({ err: error }, 'GET /jobs/my-jobs error');
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -166,7 +168,7 @@ router.get('/:id', verifyToken, async (req, res) => {
 
     res.json({ success: true, job });
   } catch (error) {
-    console.error('GET /jobs/:id error:', error);
+    log.error({ err: error }, 'GET /jobs/:id error');
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -185,7 +187,7 @@ router.post('/', verifyToken, createJobValidation, validate, async (req, res) =>
       message: 'Job created successfully',
     });
   } catch (error) {
-    console.error('POST /jobs error:', error);
+    log.error({ err: error }, 'POST /jobs error');
     res.status(400).json({ success: false, error: error.message });
   }
 });
@@ -265,7 +267,7 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
       job    : updated,
     });
   } catch (error) {
-    console.error('PUT /jobs/:id/technicians error:', error);
+    log.error({ err: error }, 'PUT /jobs/:id/technicians error');
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -354,7 +356,7 @@ router.put('/:id', verifyToken, updateJobValidation, validate, async (req, res) 
     const job = await Job.getJobById(jobId);
     res.json({ success: true, message: 'Job updated successfully', job });
   } catch (error) {
-    console.error('PUT /jobs/:id error:', error);
+    log.error({ err: error }, 'PUT /jobs/:id error');
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -411,7 +413,7 @@ router.put('/:id/schedule', verifyToken, async (req, res) => {
     const job = await Job.getJobById(jobId);
     res.json({ success: true, message: 'Job schedule updated', job });
   } catch (error) {
-    console.error('PUT /jobs/:id/schedule error:', error);
+    log.error({ err: error }, 'PUT /jobs/:id/schedule error');
     res.status(500).json({
       success: false,
       message: 'Server error',
@@ -470,7 +472,7 @@ router.delete('/:id/vehicle', verifyToken, async (req, res) => {
       job: updated,
     });
   } catch (error) {
-    console.error('DELETE /jobs/:id/vehicle error:', error);
+    log.error({ err: error }, 'DELETE /jobs/:id/vehicle error');
     res.status(500).json({ success: false, error: error.message });
   }
 });

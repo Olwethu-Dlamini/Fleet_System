@@ -20,6 +20,8 @@ const router  = express.Router();
 // Same auth middleware used by every other route file in this project
 const { verifyToken } = require('../middleware/authMiddleware');
 const VehicleAvailabilityService = require('../services/vehicleAvailabilityService');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'availability-route' });
 
 // All routes require a valid JWT
 router.use(verifyToken);
@@ -69,7 +71,7 @@ router.get('/drivers', async (req, res) => {
     return res.json({ success: true, ...result });
 
   } catch (error) {
-    console.error('GET /api/availability/drivers error:', error.message);
+    log.error({ err: error.message }, 'GET /api/availability/drivers error');
     return res.status(400).json({ success: false, error: error.message });
   }
 });
@@ -112,7 +114,7 @@ router.get('/vehicles', async (req, res) => {
     return res.json({ success: true, available });
 
   } catch (error) {
-    console.error('GET /api/availability/vehicles error:', error.message);
+    log.error({ err: error.message }, 'GET /api/availability/vehicles error');
     return res.status(400).json({ success: false, error: error.message });
   }
 });
@@ -167,7 +169,7 @@ router.post('/check-drivers', async (req, res) => {
     return res.json({ success: true, ...result });
 
   } catch (error) {
-    console.error('POST /api/availability/check-drivers error:', error.message);
+    log.error({ err: error.message }, 'POST /api/availability/check-drivers error');
     return res.status(400).json({ success: false, error: error.message });
   }
 });

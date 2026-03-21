@@ -24,6 +24,8 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../config/database');
 const { verifyToken, schedulerOrAbove } = require('../middleware/authMiddleware');
+const logger  = require('../config/logger');
+const log     = logger.child({ service: 'reports-route' });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
 router.use(verifyToken, schedulerOrAbove);
@@ -124,7 +126,7 @@ router.get('/summary', async (req, res) => {
       },
     });
   } catch (err) {
-    console.error('GET /reports/summary error:', err);
+    log.error({ err: err }, 'GET /reports/summary error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -190,7 +192,7 @@ router.get('/jobs-by-vehicle', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/jobs-by-vehicle error:', err);
+    log.error({ err: err }, 'GET /reports/jobs-by-vehicle error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -258,7 +260,7 @@ router.get('/jobs-by-technician', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/jobs-by-technician error:', err);
+    log.error({ err: err }, 'GET /reports/jobs-by-technician error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -305,7 +307,7 @@ router.get('/jobs-by-type', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/jobs-by-type error:', err);
+    log.error({ err: err }, 'GET /reports/jobs-by-type error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -408,7 +410,7 @@ router.get('/cancellations', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/cancellations error:', err);
+    log.error({ err: err }, 'GET /reports/cancellations error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -448,7 +450,7 @@ router.get('/daily-volume', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/daily-volume error:', err);
+    log.error({ err: err }, 'GET /reports/daily-volume error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -504,7 +506,7 @@ router.get('/vehicle-utilisation', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/vehicle-utilisation error:', err);
+    log.error({ err: err }, 'GET /reports/vehicle-utilisation error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -574,7 +576,7 @@ router.get('/technician-performance', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/technician-performance error:', err);
+    log.error({ err: err }, 'GET /reports/technician-performance error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -756,7 +758,7 @@ router.get('/executive-dashboard', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('GET /reports/executive-dashboard error:', err);
+    log.error({ err: err }, 'GET /reports/executive-dashboard error');
     res.status(500).json({ success: false, error: err.message });
   }
 });

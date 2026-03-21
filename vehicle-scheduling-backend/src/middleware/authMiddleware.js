@@ -5,6 +5,8 @@
 
 const jwt                    = require('jsonwebtoken');
 const { USER_ROLE, PERMISSIONS } = require('../config/constants');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'auth-middleware' });
 
 const JWT_SECRET = process.env.JWT_SECRET;
 // Note: startup guard in server.js ensures JWT_SECRET is always set at runtime
@@ -131,7 +133,7 @@ const requirePermission = (permission) => {
 
     if (!allowedRoles) {
       // Unknown permission key — fail safe (deny access)
-      console.warn(`⚠️  Unknown permission key: "${permission}"`);
+      log.warn({ permission }, `Unknown permission key: "${permission}"`);
       return res.status(403).json({
         success: false,
         message: 'Permission not defined. Access denied.',

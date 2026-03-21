@@ -5,6 +5,8 @@
 // ============================================
 
 const JobAssignmentService = require('../services/jobAssignmentService');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'job-assignment-controller' });
 
 /**
  * Job Assignment Controller
@@ -90,11 +92,7 @@ class JobAssignmentController {
       // ============================================
       // Call service layer to perform assignment
       // ============================================
-      console.log('📋 Attempting to assign job...');
-      console.log(`   Job ID: ${job_id}`);
-      console.log(`   Vehicle ID: ${vehicle_id}`);
-      console.log(`   Driver ID: ${driver_id || 'None'}`);
-      console.log(`   Technician IDs: [${techIds.join(', ') || 'None'}]`);
+      log.info({ jobId: job_id, vehicleId: vehicle_id, driverId: driver_id || null, technicianIds: techIds }, 'Attempting to assign job');
       
       const assignment = await JobAssignmentService.assignJobToVehicle({
         job_id: parseInt(job_id),
@@ -108,7 +106,7 @@ class JobAssignmentController {
       // ============================================
       // Send success response
       // ============================================
-      console.log('✅ Assignment successful!');
+      log.info({ jobId: job_id }, 'Assignment successful');
       
       return res.status(201).json({
         success: true,
@@ -120,7 +118,7 @@ class JobAssignmentController {
       // ============================================
       // Handle errors and send appropriate response
       // ============================================
-      console.error('❌ Error in assignJob controller:', error.message);
+      log.error({ err: error.message }, 'Error in assignJob controller');
       
       // Check for specific error types
       
@@ -219,10 +217,7 @@ class JobAssignmentController {
       }
       const forceOverride = req.user.role === 'admin' && force_override === true;
 
-      console.log(`📋 Updating technicians for job ${jobId}: [${techIds.join(', ')}]`);
-      if (forceOverride) {
-        console.log('   ⚡ Admin force-override enabled — conflicts will be cleared');
-      }
+      log.info({ jobId, technicianIds: techIds, forceOverride }, 'Updating technicians for job');
 
       const updatedJob = await JobAssignmentService.assignTechnicians(
         jobId,
@@ -231,7 +226,7 @@ class JobAssignmentController {
         forceOverride   // ← was missing; service was always receiving undefined
       );
 
-      console.log('✅ Technicians updated successfully!');
+      log.info({ jobId }, 'Technicians updated successfully');
 
       return res.status(200).json({
         success: true,
@@ -240,7 +235,7 @@ class JobAssignmentController {
       });
 
     } catch (error) {
-      console.error('❌ Error in assignTechnicians controller:', error.message);
+      log.error({ err: error.message }, 'Error in assignTechnicians controller');
 
       if (error.message.includes('not found')) {
         return res.status(404).json({
@@ -298,7 +293,7 @@ class JobAssignmentController {
       });
       
     } catch (error) {
-      console.error('Error in unassignJob controller:', error.message);
+      log.error({ err: error.message }, 'Error in unassignJob controller');
       
       if (error.message.includes('not currently assigned')) {
         return res.status(400).json({
@@ -352,7 +347,7 @@ class JobAssignmentController {
       });
       
     } catch (error) {
-      console.error('Error in getAssignmentsByVehicle:', error.message);
+      log.error({ err: error.message }, 'Error in getAssignmentsByVehicle');
       
       return res.status(500).json({
         success: false,

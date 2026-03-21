@@ -7,6 +7,7 @@
 
 const mysql = require('mysql2/promise'); // Use promise version directly
 require('dotenv').config(); // Load environment variables from .env file
+const logger = require('./logger');
 
 // ============================================
 // Create Connection Pool
@@ -45,7 +46,7 @@ pool.on('connection', function (connection) {
   connection.query('SET SESSION group_concat_max_len = 65536', (err) => {
     if (err) {
       // Log but do not crash — pool continues to function
-      console.error('Warning: failed to set group_concat_max_len on connection:', err.message);
+      logger.warn({ err: err.message }, 'Failed to set group_concat_max_len on connection');
     }
   });
 });

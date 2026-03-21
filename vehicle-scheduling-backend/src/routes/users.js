@@ -17,6 +17,8 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../config/database');
 const bcrypt  = require('bcryptjs');
+const logger  = require('../config/logger');
+const log     = logger.child({ service: 'users-route' });
 
 // Use shared middleware so role checks use the same USER_ROLE constants as JWT
 const { verifyToken, adminOnly, schedulerOrAbove } = require('../middleware/authMiddleware');
@@ -101,7 +103,7 @@ router.get('/', requireAdminOrScheduler, async (req, res) => {
 
     res.json({ success: true, users: rows.map(normaliseUser), count: rows.length });
   } catch (err) {
-    console.error('GET /api/users error:', err);
+    log.error({ err: err }, 'GET /api/users error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -123,7 +125,7 @@ router.get('/:id', requireAdminOrScheduler, async (req, res) => {
 
     res.json({ success: true, user: normaliseUser(rows[0]) });
   } catch (err) {
-    console.error('GET /api/users/:id error:', err);
+    log.error({ err: err }, 'GET /api/users/:id error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -186,7 +188,7 @@ router.post('/', requireAdmin, createUserValidation, validate, async (req, res) 
         message: `A user with this ${field} already exists`,
       });
     }
-    console.error('POST /api/users error:', err);
+    log.error({ err: err }, 'POST /api/users error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -259,7 +261,7 @@ router.put('/:id', requireAdmin, updateUserValidation, validate, async (req, res
         message: `A user with this ${field} already exists`,
       });
     }
-    console.error('PUT /api/users/:id error:', err);
+    log.error({ err: err }, 'PUT /api/users/:id error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -290,7 +292,7 @@ router.delete('/:id', requireAdmin, async (req, res) => {
 
     res.json({ success: true, message: 'User deactivated successfully' });
   } catch (err) {
-    console.error('DELETE /api/users/:id error:', err);
+    log.error({ err: err }, 'DELETE /api/users/:id error');
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -323,7 +325,7 @@ router.post('/:id/reset-password', requireAdmin, async (req, res) => {
 
     res.json({ success: true, message: 'Password reset successfully' });
   } catch (err) {
-    console.error('POST /api/users/:id/reset-password error:', err);
+    log.error({ err: err }, 'POST /api/users/:id/reset-password error');
     res.status(500).json({ success: false, error: err.message });
   }
 });

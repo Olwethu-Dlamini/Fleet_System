@@ -15,6 +15,8 @@
 
 const db  = require('../config/database');
 const Job = require('../models/Job');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'dashboard-controller' });
 
 class DashboardController {
 
@@ -138,7 +140,7 @@ class DashboardController {
       });
 
     } catch (err) {
-      console.error('getDashboardSummary error:', err);
+      log.error({ err: err }, 'getDashboardSummary error');
       return res.status(500).json({ success: false, error: err.message });
     }
   }
@@ -202,7 +204,7 @@ class DashboardController {
       });
 
     } catch (err) {
-      console.error('getQuickStats error:', err);
+      log.error({ err: err }, 'getQuickStats error');
       return res.status(500).json({ success: false, error: err.message });
     }
   }

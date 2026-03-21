@@ -6,6 +6,8 @@
 const db = require('../config/database');
 const Job = require('../models/Job');
 const Vehicle = require('../models/Vehicle');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'reports-service' });
 
 /**
  * Reports Service
@@ -66,9 +68,7 @@ class ReportsService {
     try {
       const { startDate, endDate, jobType = null } = filters;
       
-      console.log('📊 Generating Jobs Per Vehicle Report');
-      console.log(`   Date Range: ${startDate} to ${endDate}`);
-      if (jobType) console.log(`   Job Type Filter: ${jobType}`);
+      log.info({ startDate, endDate, jobType }, 'Generating jobs per vehicle report');
       
       // Validate date range
       this.validateDateRange(startDate, endDate);
@@ -161,14 +161,12 @@ class ReportsService {
         }))
       };
       
-      console.log(`✅ Jobs Per Vehicle Report Generated`);
-      console.log(`   Total Jobs: ${report.summary.totalJobs}`);
-      console.log(`   Vehicles: ${report.summary.totalVehicles}`);
+      log.info({ totalJobs: report.summary.totalJobs, vehicles: report.summary.totalVehicles }, 'Jobs per vehicle report generated');
       
       return report;
       
     } catch (error) {
-      console.error('❌ Error in ReportsService.getJobsPerVehicle:', error);
+      log.error({ err: error }, 'Error in ReportsService.getJobsPerVehicle');
       throw error;
     }
   }
@@ -215,8 +213,7 @@ class ReportsService {
     try {
       const { startDate, endDate } = filters;
       
-      console.log('📊 Generating Vehicle Utilization Report');
-      console.log(`   Date Range: ${startDate} to ${endDate}`);
+      log.info({ startDate, endDate }, 'Generating vehicle utilization report');
       
       // Validate date range
       this.validateDateRange(startDate, endDate);
@@ -314,14 +311,12 @@ class ReportsService {
         vehicles: vehicles.sort((a, b) => b.utilizationPercent - a.utilizationPercent)
       };
       
-      console.log(`✅ Vehicle Utilization Report Generated`);
-      console.log(`   Average Utilization: ${report.summary.avgUtilization}%`);
-      console.log(`   Total Utilized Hours: ${report.summary.totalUtilizedHours}`);
+      log.info({ avgUtilization: report.summary.avgUtilization, totalUtilizedHours: report.summary.totalUtilizedHours }, 'Vehicle utilization report generated');
       
       return report;
       
     } catch (error) {
-      console.error('❌ Error in ReportsService.getVehicleUtilization:', error);
+      log.error({ err: error }, 'Error in ReportsService.getVehicleUtilization');
       throw error;
     }
   }
@@ -359,9 +354,7 @@ class ReportsService {
     try {
       const { startDate, endDate, includeTrends = false } = filters;
       
-      console.log('📊 Generating Jobs By Service Type Report');
-      console.log(`   Date Range: ${startDate} to ${endDate}`);
-      console.log(`   Include Trends: ${includeTrends}`);
+      log.info({ startDate, endDate, includeTrends }, 'Generating jobs by service type report');
       
       // Validate date range
       this.validateDateRange(startDate, endDate);
@@ -454,14 +447,12 @@ class ReportsService {
         trends: trends
       };
       
-      console.log(`✅ Jobs By Service Type Report Generated`);
-      console.log(`   Total Jobs: ${report.summary.totalJobs}`);
-      console.log(`   Types: ${report.summary.typesCount}`);
+      log.info({ totalJobs: report.summary.totalJobs, typesCount: report.summary.typesCount }, 'Jobs by service type report generated');
       
       return report;
       
     } catch (error) {
-      console.error('❌ Error in ReportsService.getJobsByServiceType:', error);
+      log.error({ err: error }, 'Error in ReportsService.getJobsByServiceType');
       throw error;
     }
   }
@@ -504,9 +495,7 @@ class ReportsService {
     try {
       const { startDate, endDate, jobType = null } = filters;
       
-      console.log('📊 Generating Completion Analysis Report');
-      console.log(`   Date Range: ${startDate} to ${endDate}`);
-      if (jobType) console.log(`   Job Type Filter: ${jobType}`);
+      log.info({ startDate, endDate, jobType }, 'Generating completion analysis report');
       
       // Validate date range
       this.validateDateRange(startDate, endDate);
@@ -665,14 +654,12 @@ class ReportsService {
         byVehicle: formattedByVehicle
       };
       
-      console.log(`✅ Completion Analysis Report Generated`);
-      console.log(`   Completion Rate: ${report.summary.completionRate}%`);
-      console.log(`   Cancellation Rate: ${report.summary.cancellationRate}%`);
+      log.info({ completionRate: report.summary.completionRate, cancellationRate: report.summary.cancellationRate }, 'Completion analysis report generated');
       
       return report;
       
     } catch (error) {
-      console.error('❌ Error in ReportsService.getCompletionAnalysis:', error);
+      log.error({ err: error }, 'Error in ReportsService.getCompletionAnalysis');
       throw error;
     }
   }
@@ -694,7 +681,7 @@ class ReportsService {
    */
   static async getExecutiveDashboard(filters = {}) {
     try {
-      console.log('📊 Generating Executive Dashboard Report');
+      log.info({ filters }, 'Generating executive dashboard report');
       
       // Execute all reports in parallel
       const [
@@ -751,14 +738,12 @@ class ReportsService {
         completionTrends: completionAnalysis.byStatus
       };
       
-      console.log(`✅ Executive Dashboard Generated`);
-      console.log(`   Total Jobs: ${dashboard.keyMetrics.totalJobs}`);
-      console.log(`   Completion Rate: ${dashboard.keyMetrics.completionRate}%`);
+      log.info({ totalJobs: dashboard.keyMetrics.totalJobs, completionRate: dashboard.keyMetrics.completionRate }, 'Executive dashboard generated');
       
       return dashboard;
       
     } catch (error) {
-      console.error('❌ Error in ReportsService.getExecutiveDashboard:', error);
+      log.error({ err: error }, 'Error in ReportsService.getExecutiveDashboard');
       throw error;
     }
   }
@@ -818,7 +803,7 @@ class ReportsService {
       return Object.values(dailyTrends);
       
     } catch (error) {
-      console.error('Error in getDailyTrends:', error);
+      log.error({ err: error }, 'Error in getDailyTrends');
       return [];
     }
   }

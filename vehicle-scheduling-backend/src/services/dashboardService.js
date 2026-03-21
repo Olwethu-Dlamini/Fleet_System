@@ -7,6 +7,8 @@ const db = require('../config/database');
 const Job = require('../models/Job');
 const Vehicle = require('../models/Vehicle');
 const VehicleAvailabilityService = require('./vehicleAvailabilityService');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'dashboard-service' });
 
 /**
  * Dashboard Service
@@ -63,9 +65,7 @@ class DashboardService {
       const weekStart = this.getWeekStart(todayDate);
       const weekEnd = this.getWeekEnd(todayDate);
       
-      console.log('📊 Dashboard Summary Request');
-      console.log(`   Today: ${today}`);
-      console.log(`   Week: ${weekStart} to ${weekEnd}`);
+      log.info({ today, weekStart, weekEnd }, 'Dashboard summary request');
       
       // Execute all queries in parallel for better performance
       const [
@@ -109,16 +109,12 @@ class DashboardService {
         vehiclesAvailable: this.formatVehiclesForFrontend(availableVehicles)
       };
       
-      console.log('✅ Dashboard summary compiled');
-      console.log(`   Jobs today: ${summary.summary.jobsToday}`);
-      console.log(`   Jobs this week: ${summary.summary.jobsThisWeek}`);
-      console.log(`   Vehicles busy: ${summary.summary.vehiclesBusy}`);
-      console.log(`   Vehicles available: ${summary.summary.vehiclesAvailable}`);
+      log.info({ jobsToday: summary.summary.jobsToday, jobsThisWeek: summary.summary.jobsThisWeek, vehiclesBusy: summary.summary.vehiclesBusy, vehiclesAvailable: summary.summary.vehiclesAvailable }, 'Dashboard summary compiled');
       
       return summary;
       
     } catch (error) {
-      console.error('❌ Error in DashboardService.getDashboardSummary:', error);
+      log.error({ err: error }, 'Error in DashboardService.getDashboardSummary');
       throw error;
     }
   }
@@ -137,7 +133,7 @@ class DashboardService {
       const jobs = await Job.getJobsByDate(date);
       return jobs;
     } catch (error) {
-      console.error('Error getting jobs for date:', error);
+      log.error({ err: error }, 'Error getting jobs for date');
       throw error;
     }
   }
@@ -157,7 +153,7 @@ class DashboardService {
       const jobs = await Job.getJobsByDateRange(startDate, endDate);
       return jobs;
     } catch (error) {
-      console.error('Error getting jobs for week:', error);
+      log.error({ err: error }, 'Error getting jobs for week');
       throw error;
     }
   }
@@ -206,7 +202,7 @@ class DashboardService {
       const [assignments] = await db.query(sql, [date, currentTime]);
       return assignments;
     } catch (error) {
-      console.error('Error getting current assignments:', error);
+      log.error({ err: error }, 'Error getting current assignments');
       throw error;
     }
   }

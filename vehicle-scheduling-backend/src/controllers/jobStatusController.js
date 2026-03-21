@@ -6,6 +6,8 @@
 
 const JobStatusService = require('../services/jobStatusService');
 const Job = require('../models/Job');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'job-status-controller' });
 
 /**
  * Job Status Controller
@@ -49,9 +51,7 @@ class JobStatusController {
     try {
       const { job_id, new_status, changed_by, reason, metadata } = req.body;
       
-      console.log('\n═══════════════════════════════════════════════════════');
-      console.log('📝 Status Update Request Received');
-      console.log('═══════════════════════════════════════════════════════');
+      log.info({ jobId: job_id, newStatus: new_status, changedBy: changed_by }, 'Status update request received');
       
       // ============================================
       // Validate required fields
@@ -98,10 +98,7 @@ class JobStatusController {
         });
       }
       
-      console.log(`   Job ID: ${job_id}`);
-      console.log(`   New Status: ${new_status}`);
-      console.log(`   Changed By: ${changed_by}`);
-      if (reason) console.log(`   Reason: ${reason}`);
+      if (reason) log.debug({ jobId: job_id, reason }, 'Status update reason');
       
       // ============================================
       // Update the status
@@ -114,9 +111,7 @@ class JobStatusController {
         metadata || null
       );
       
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('✅ Status Update Successful');
-      console.log('═══════════════════════════════════════════════════════\n');
+      log.info({ jobId: job_id, newStatus: new_status }, 'Status update successful');
       
       // ============================================
       // Send success response
@@ -131,10 +126,7 @@ class JobStatusController {
       });
       
     } catch (error) {
-      console.error('═══════════════════════════════════════════════════════');
-      console.error('❌ Error in updateStatus controller:');
-      console.error(error.message);
-      console.error('═══════════════════════════════════════════════════════\n');
+      log.error({ err: error.message }, 'Error in updateStatus controller');
       
       // ============================================
       // Handle specific error types
@@ -241,7 +233,7 @@ class JobStatusController {
       });
       
     } catch (error) {
-      console.error('Error in getStatusHistory:', error.message);
+      log.error({ err: error.message }, 'Error in getStatusHistory');
       
       return res.status(500).json({
         success: false,
@@ -299,7 +291,7 @@ class JobStatusController {
       });
       
     } catch (error) {
-      console.error('Error in getAllowedTransitions:', error.message);
+      log.error({ err: error.message }, 'Error in getAllowedTransitions');
       
       if (error.message.includes('not found')) {
         return res.status(404).json({
@@ -359,7 +351,7 @@ class JobStatusController {
       });
       
     } catch (error) {
-      console.error('Error in validateTransition:', error.message);
+      log.error({ err: error.message }, 'Error in validateTransition');
       
       return res.status(500).json({
         success: false,
@@ -406,7 +398,7 @@ class JobStatusController {
       });
       
     } catch (error) {
-      console.error('Error in getRecentStatusChanges:', error.message);
+      log.error({ err: error.message }, 'Error in getRecentStatusChanges');
       
       return res.status(500).json({
         success: false,

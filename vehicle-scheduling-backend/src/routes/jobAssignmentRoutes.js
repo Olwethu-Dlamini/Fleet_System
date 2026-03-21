@@ -10,6 +10,8 @@ const router = express.Router();
 const VehicleAvailabilityService = require('../services/vehicleAvailabilityService');
 const JobAssignmentController    = require('../controllers/jobAssignmentController');
 const { verifyToken }            = require('../middleware/authMiddleware');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'job-assignment-route' });
 
 /**
  * Job Assignment Routes
@@ -101,7 +103,7 @@ router.post('/check-conflict', async (req, res) => {
     });
     
   } catch (error) {
-    console.error('Conflict check error:', error);
+    log.error({ err: error }, 'Conflict check error');
     res.status(500).json({ 
       success: false, 
       message: 'Server error while checking availability',

@@ -10,6 +10,8 @@
 
 const db = require('../config/database');
 const Job = require('../models/Job');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'availability-service' });
 
 /**
  * Vehicle Availability Service
@@ -158,7 +160,7 @@ class VehicleAvailabilityService {
       }
       
     } catch (error) {
-      console.error('Error in checkVehicleAvailability:', error);
+      log.error({ err: error }, 'Error in checkVehicleAvailability');
       throw new Error(`Failed to check vehicle availability: ${error.message}`);
     }
   }
@@ -221,7 +223,7 @@ class VehicleAvailabilityService {
       return availableVehicles;
       
     } catch (error) {
-      console.error('Error in findAvailableVehicles:', error);
+      log.error({ err: error }, 'Error in findAvailableVehicles');
       throw error;
     }
   }
@@ -328,7 +330,7 @@ class VehicleAvailabilityService {
       };
 
     } catch (error) {
-      console.error('Error in findAvailableDrivers:', error);
+      log.error({ err: error }, 'Error in findAvailableDrivers');
       throw new Error(`Failed to check driver availability: ${error.message}`);
     }
   }
@@ -372,7 +374,7 @@ class VehicleAvailabilityService {
       };
       
     } catch (error) {
-      console.error('Error in getVehicleSchedule:', error);
+      log.error({ err: error }, 'Error in getVehicleSchedule');
       throw error;
     }
   }
@@ -584,7 +586,7 @@ class VehicleAvailabilityService {
         })),
       };
     } catch (error) {
-      console.error('Error in checkDriversAvailability:', error);
+      log.error({ err: error }, 'Error in checkDriversAvailability');
       throw new Error(`Failed to check driver availability: ${error.message}`);
     }
   }

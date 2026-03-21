@@ -5,6 +5,8 @@
 // ============================================
 
 const db = require('../config/database');
+const logger = require('../config/logger');
+const log    = logger.child({ service: 'vehicle-model' });
 
 /**
  * Vehicle Model
@@ -69,7 +71,7 @@ class Vehicle {
       
     } catch (error) {
       // If SQL error occurs, log it and re-throw
-      console.error('Error in Vehicle.getAllVehicles:', error);
+      log.error({ err: error }, 'Error in Vehicle.getAllVehicles');
       throw error;
     }
   }
@@ -119,7 +121,7 @@ class Vehicle {
       return rows[0] || null;
       
     } catch (error) {
-      console.error('Error in Vehicle.getVehicleById:', error);
+      log.error({ err: error }, 'Error in Vehicle.getVehicleById');
       throw error;
     }
   }
@@ -193,7 +195,7 @@ class Vehicle {
       return newVehicle;
       
     } catch (error) {
-      console.error('Error in Vehicle.createVehicle:', error);
+      log.error({ err: error }, 'Error in Vehicle.createVehicle');
       
       // Check for specific MySQL errors
       if (error.code === 'ER_DUP_ENTRY') {
@@ -255,7 +257,7 @@ class Vehicle {
       return updatedVehicle;
       
     } catch (error) {
-      console.error('Error in Vehicle.updateVehicleStatus:', error);
+      log.error({ err: error }, 'Error in Vehicle.updateVehicleStatus');
       throw error;
     }
   }
@@ -330,7 +332,7 @@ class Vehicle {
       return updatedVehicle;
       
     } catch (error) {
-      console.error('Error in Vehicle.updateVehicle:', error);
+      log.error({ err: error }, 'Error in Vehicle.updateVehicle');
       
       if (error.code === 'ER_DUP_ENTRY') {
         throw new Error('A vehicle with this license plate already exists');
@@ -395,7 +397,7 @@ class Vehicle {
       return rows;
       
     } catch (error) {
-      console.error('Error in Vehicle.getAvailableVehicles:', error);
+      log.error({ err: error }, 'Error in Vehicle.getAvailableVehicles');
       throw error;
     }
   }
@@ -439,7 +441,7 @@ class Vehicle {
       }
       
     } catch (error) {
-      console.error('Error in Vehicle.deleteVehicle:', error);
+      log.error({ err: error }, 'Error in Vehicle.deleteVehicle');
       throw error;
     }
   }
