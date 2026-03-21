@@ -8,6 +8,7 @@ const db = require('../config/database');
 const Job = require('../models/Job');
 const Vehicle = require('../models/Vehicle');
 const VehicleAvailabilityService = require('./vehicleAvailabilityService');
+const logger = require('../config/logger').child({ service: 'jobAssignmentService' });
 
 /**
  * Job Assignment Service - CORRECTED FOR EXISTING SCHEMA
@@ -531,11 +532,11 @@ class JobAssignmentService {
       return row;
       
     } catch (error) {
-      console.error('Error in JobAssignmentService.getAssignmentDetails:', error);
+      logger.error({ err: error }, 'Error in JobAssignmentService.getAssignmentDetails');
       throw error;
     }
   }
-  
+
   // ==========================================
   // BONUS FUNCTION: getAssignmentsByDateRange
   // PURPOSE: Get all assignments within a date range
@@ -583,7 +584,7 @@ class JobAssignmentService {
       return assignments;
       
     } catch (error) {
-      console.error('Error in JobAssignmentService.getAssignmentsByDateRange:', error);
+      logger.error({ err: error }, 'Error in JobAssignmentService.getAssignmentsByDateRange');
       throw error;
     }
   }

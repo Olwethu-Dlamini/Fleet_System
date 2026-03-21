@@ -5,6 +5,7 @@
 // ============================================
 
 const db = require('../config/database');
+const logger = require('../config/logger').child({ service: 'Job' });
 
 /**
  * Job Model
@@ -208,7 +209,7 @@ class Job {
       return newJob;
 
     } catch (error) {
-      console.error('Error in Job.createJob:', error);
+      logger.error({ err: error }, 'Error in Job.createJob');
 
       // Check for specific errors
       if (error.code === 'ER_DUP_ENTRY') {
@@ -295,7 +296,7 @@ class Job {
       return updatedJob;
 
     } catch (error) {
-      console.error('Error in Job.updateJob:', error);
+      logger.error({ err: error, id }, 'Error in Job.updateJob');
       throw error;
     }
   }
@@ -367,7 +368,7 @@ class Job {
       return Job._parseTechnicians(Job._fixDates(rows));
 
     } catch (error) {
-      console.error('Error in Job.getJobsByDate:', error);
+      logger.error({ err: error, date }, 'Error in Job.getJobsByDate');
       throw error;
     }
   }
@@ -445,7 +446,7 @@ class Job {
       return Job._parseTechnicians(Job._fixDates(rows));
 
     } catch (error) {
-      console.error('Error in Job.getJobsByVehicle:', error);
+      logger.error({ err: error, vehicleId }, 'Error in Job.getJobsByVehicle');
       throw error;
     }
   }
@@ -508,7 +509,7 @@ class Job {
       return fixed[0] || null;
 
     } catch (error) {
-      console.error('Error in Job.getJobById:', error);
+      logger.error({ err: error, id }, 'Error in Job.getJobById');
       throw error;
     }
   }
@@ -594,7 +595,7 @@ class Job {
       return Job._parseTechnicians(Job._fixDates(rows));
 
     } catch (error) {
-      console.error('Error in Job.getAllJobs:', error);
+      logger.error({ err: error }, 'Error in Job.getAllJobs');
       throw error;
     }
   }
@@ -652,7 +653,7 @@ class Job {
       return Job._parseTechnicians(Job._fixDates(rows));
 
     } catch (error) {
-      console.error('Error in Job.getJobsByTechnician:', error);
+      logger.error({ err: error, userId }, 'Error in Job.getJobsByTechnician');
       throw error;
     }
   }
@@ -692,11 +693,11 @@ class Job {
       await conn.commit();
 
       if (isAdminOverride) {
-        console.log(`   ✓ [ADMIN OVERRIDE] Technician list replaced for job ${jobId}`);
+        logger.info({ jobId }, 'Admin override: technician list replaced');
       }
     } catch (err) {
       await conn.rollback();
-      console.error('Error in Job.assignTechnicians:', err);
+      logger.error({ err, jobId }, 'Error in Job.assignTechnicians');
       throw err;
     } finally {
       conn.release();
@@ -751,10 +752,7 @@ class Job {
       [technicianIds, conflictingJobIds]
     );
 
-    console.log(
-      `   ✓ Removed drivers [${technicianIds.join(', ')}] from ` +
-      `conflicting jobs [${conflictingJobIds.join(', ')}]`
-    );
+    logger.info({ technicianIds, conflictingJobIds }, 'Removed drivers from conflicting jobs');
   }
 
   // ==========================================
@@ -796,7 +794,7 @@ class Job {
       return updatedJob;
 
     } catch (error) {
-      console.error('Error in Job.updateJobStatus:', error);
+      logger.error({ err: error, id }, 'Error in Job.updateJobStatus');
       throw error;
     }
   }
@@ -833,7 +831,7 @@ class Job {
       return `JOB-${year}-${String(seq.counter).padStart(4, '0')}`;
 
     } catch (error) {
-      console.error('Error in Job.generateJobNumber:', error);
+      logger.error({ err: error }, 'Error in Job.generateJobNumber');
       throw error;
     }
   }
@@ -869,7 +867,7 @@ class Job {
       return { success: true, message: 'Job deleted successfully' };
 
     } catch (error) {
-      console.error('Error in Job.deleteJob:', error);
+      logger.error({ err: error, id }, 'Error in Job.deleteJob');
       throw error;
     }
   }
@@ -900,7 +898,7 @@ class Job {
       return Job._parseTechnicians(Job._fixDates(rows));
 
     } catch (error) {
-      console.error('Error in Job.getJobsByDateRange:', error);
+      logger.error({ err: error, startDate, endDate }, 'Error in Job.getJobsByDateRange');
       throw error;
     }
   }

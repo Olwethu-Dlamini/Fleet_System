@@ -6,6 +6,7 @@
 
 const db = require('../config/database');
 const Job = require('../models/Job');
+const logger = require('../config/logger').child({ service: 'jobStatusService' });
 
 /**
  * Job Status Service
@@ -108,16 +109,13 @@ class JobStatusService {
       const job = jobRows[0];
       const currentStatus = job.current_status;
       
-      console.log(`\n🔄 Status Update Request:`);
-      console.log(`   Job: ${job.job_number}`);
-      console.log(`   Current Status: ${currentStatus}`);
-      console.log(`   New Status: ${newStatus}`);
+      logger.debug({ jobNumber: job.job_number, currentStatus, newStatus }, 'Status update request');
       
       // ============================================
       // STEP 3: Check if status is actually changing
       // ============================================
       if (currentStatus === newStatus) {
-        console.log(`   ℹ️  Status unchanged (already ${newStatus})`);
+        logger.debug({ jobId, newStatus }, 'Status unchanged — no update needed');
         await connection.commit();
         return await Job.getJobById(jobId);
       }
@@ -134,7 +132,7 @@ class JobStatusService {
         );
       }
       
-      console.log(`   ✓ Transition is valid`);
+      logger.debug({ jobId, currentStatus, newStatus }, 'Transition validated');
       
       // ============================================
       // STEP 5: Special business rule validations
@@ -163,11 +161,11 @@ class JobStatusService {
         );
         
         if (assignmentCheck[0].count > 0 && !reason?.includes('unassign')) {
-          console.log(`   ⚠️  Warning: Changing assigned job to pending while still assigned`);
+          logger.warn({ jobId }, 'Changing assigned job to pending while still assigned');
         }
       }
       
-      console.log(`   ✓ Business rules validated`);
+      logger.debug({ jobId }, 'Business rules validated');
       
       // ============================================
       // STEP 6: Update the job status
@@ -177,7 +175,7 @@ class JobStatusService {
         [newStatus, jobId]
       );
       
-      console.log(`   ✓ Status updated in database`);
+      logger.debug({ jobId, newStatus }, 'Status updated in database');
       
       // ============================================
       // STEP 7: Log the status change in history
@@ -203,14 +201,14 @@ class JobStatusService {
         // ✅ NO metadata parameter - column doesn't exist in schema
       ]);
       
-      console.log(`   ✓ Status change logged in history (ID: ${historyResult.insertId})`);
+      logger.debug({ jobId, historyId: historyResult.insertId }, 'Status change logged in history');
       
       // ============================================
       // STEP 8: Commit transaction
       // ============================================
       await connection.commit();
       
-      console.log(`   ✅ Status update completed: ${currentStatus} → ${newStatus}\n`);
+      logger.info({ jobId, currentStatus, newStatus }, 'Status update completed');
       
       // ============================================
       // STEP 9: Return updated job with history entry
@@ -228,7 +226,7 @@ class JobStatusService {
     } catch (error) {
       // Rollback transaction on error
       await connection.rollback();
-      console.error('   ❌ Error updating job status:', error.message);
+      logger.error({ err: error, jobId }, 'Error updating job status');
       throw error;
       
     } finally {
@@ -285,11 +283,11 @@ class JobStatusService {
       return rows;
       
     } catch (error) {
-      console.error('Error in JobStatusService.getJobStatusHistory:', error);
+      logger.error({ err: error, jobId }, 'Error in JobStatusService.getJobStatusHistory');
       throw error;
     }
   }
-  
+
   // ==========================================
   // FUNCTION: getHistoryEntry
   // PURPOSE: Get a single history entry by ID
@@ -329,11 +327,11 @@ class JobStatusService {
       return rows[0];
       
     } catch (error) {
-      console.error('Error in JobStatusService.getHistoryEntry:', error);
+      logger.error({ err: error, historyId }, 'Error in JobStatusService.getHistoryEntry');
       throw error;
     }
   }
-  
+
   // ==========================================
   // FUNCTION: getAllStatusChanges
   // PURPOSE: Get all recent status changes (for dashboard/monitoring)
@@ -392,11 +390,11 @@ class JobStatusService {
       return rows;
       
     } catch (error) {
-      console.error('Error in JobStatusService.getAllStatusChanges:', error);
+      logger.error({ err: error }, 'Error in JobStatusService.getAllStatusChanges');
       throw error;
     }
   }
-  
+
   // ==========================================
   // FUNCTION: canTransitionTo
   // PURPOSE: Check if a status transition is allowed
@@ -447,11 +445,11 @@ class JobStatusService {
       return transitions;
       
     } catch (error) {
-      console.error('Error in JobStatusService.getAllowedTransitions:', error);
+      logger.error({ err: error, jobId }, 'Error in JobStatusService.getAllowedTransitions');
       throw error;
     }
   }
-  
+
   // ==========================================
   // FUNCTION: validateJobWorkflow
   // PURPOSE: Check if job is ready for a specific status
@@ -526,7 +524,7 @@ class JobStatusService {
       };
       
     } catch (error) {
-      console.error('Error in JobStatusService.validateJobWorkflow:', error);
+      logger.error({ err: error, jobId }, 'Error in JobStatusService.validateJobWorkflow');
       throw error;
     }
   }
