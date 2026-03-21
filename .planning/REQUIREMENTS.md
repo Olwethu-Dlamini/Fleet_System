@@ -22,13 +22,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Notifications & Alerts (NOTIF)
 
-- [ ] **NOTIF-01**: Push notifications via Firebase Cloud Messaging (FCM v1 HTTP API with firebase-admin SDK)
-- [ ] **NOTIF-02**: Notification when job is about to start (configurable lead time)
-- [ ] **NOTIF-03**: Notification when job is overdue (past scheduled end, not completed)
-- [ ] **NOTIF-04**: Email notifications via nodemailer (togglable per user in settings)
-- [ ] **NOTIF-05**: In-app notification center with read/unread status and history
+- [x] **NOTIF-01**: Push notifications via Firebase Cloud Messaging (FCM v1 HTTP API with firebase-admin SDK)
+- [x] **NOTIF-02**: Notification when job is about to start (configurable lead time)
+- [x] **NOTIF-03**: Notification when job is overdue (past scheduled end, not completed)
+- [x] **NOTIF-04**: Email notifications via nodemailer (togglable per user in settings)
+- [x] **NOTIF-05**: In-app notification center with read/unread status and history
 - [ ] **NOTIF-06**: FCM topic-based subscriptions per user (`driver_{userId}`, `scheduler_{userId}`)
-- [ ] **NOTIF-07**: Background cron job (node-cron) for checking overdue jobs and upcoming starts
+- [x] **NOTIF-07**: Background cron job (node-cron) for checking overdue jobs and upcoming starts
 
 ### Time Management (TIME)
 

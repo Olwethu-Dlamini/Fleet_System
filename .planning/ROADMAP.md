@@ -12,7 +12,7 @@
 | 2 | User, Vehicle & Scheduler Enhancements | 3/3 | Complete   | 2026-03-21 |
 | 3 | Job Assignment & Status Automation | 3/3 | Complete   | 2026-03-21 |
 | 4 | Dashboard & Views | 3/3 | Complete   | 2026-03-21 |
-| 5 | Notifications & Alerts | NOTIF-01–07 | MEDIUM | Phase 1 (foundation), Phase 3 (status automation) |
+| 5 | Notifications & Alerts | 1/3 | In Progress|  |
 | 6 | Time Management | TIME-01–07 | HIGH | Phase 5 (notifications), Phase 3 (assignment) |
 | 7 | GPS, Maps & Live Tracking | GPS-01–08 | HIGH | Phase 1 (security), Phase 5 (notifications) |
 | 8 | Testing Suite | TEST-01–05 | MEDIUM | All features complete (Phases 1–7) |
@@ -173,10 +173,10 @@ Plans:
 - [ ] Notifications respect tenant isolation
 
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 
 Plans:
-- [ ] 05-01-PLAN.md -- Backend: DB migration (notifications + preferences tables), Firebase config, notification/email services, cron extensions, notification API routes
+- [x] 05-01-PLAN.md -- Backend: DB migration (notifications + preferences tables), Firebase config, notification/email services, cron extensions, notification API routes
 - [ ] 05-02-PLAN.md -- FCM integration: Flutter FCM service + Android config, login token registration, backend topic subscription
 - [ ] 05-03-PLAN.md -- Flutter UI: notification model/provider/service, bell icon with badge, notification center screen
 

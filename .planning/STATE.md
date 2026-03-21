@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 04-03-PLAN.md
-last_updated: "2026-03-21T16:29:55.530Z"
+stopped_at: Completed 05-01-PLAN.md
+last_updated: "2026-03-21T17:36:07.967Z"
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 17
+  completed_plans: 15
   percent: 100
 ---
 
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Schedulers can efficiently assign, monitor, and adjust jobs in real-time so no job falls through the cracks
-**Current focus:** Phase 04 — dashboard-views
+**Current focus:** Phase 05 — notifications-alerts
 
 ## Milestone: v1.0
 
-**Status:** Executing Phase 04
+**Status:** Executing Phase 05
 **Phases:** 9 total
 **Requirements:** 62 v1 requirements mapped across all phases
 
 ## Current Phase
 
-**Phase:** 4
+**Phase:** 5
 **Status:** Complete (02-01, 02-02, 02-03 all complete)
 **Current Plan:** 1
 **Requirements:** USR-01 to SCHED-04
@@ -107,6 +107,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | getChartData uses HOUR(scheduled_time_start) grouped by hour excluding cancelled for bar chart API | 04-01 DASH-01 |
 | 2026-03-21 | Chart data fetch non-fatal in _loadDashboard() — chart stays empty if endpoint unavailable, never blocks dashboard load | 04-02 DASH-01 |
 | 2026-03-21 | Weekend filter state in JobProvider so it persists across navigation and is accessible from any screen watching JobProvider | 04-02 DASH-02 |
+| 2026-03-21 | FCM_SERVICE_ACCOUNT_PATH not in startup guard — Firebase optional for dev, server starts without it | 05-01 NOTIF |
+| 2026-03-21 | No retry on FCM/email failures — log warn and move on, in-app record inserted first for audit trail | 05-01 NOTIF |
+| 2026-03-21 | Notification dedup via 20-min NOT EXISTS subquery on notifications table — prevents storms | 05-01 NOTIF |
 
 ## Performance Metrics
 
@@ -127,11 +130,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 04 P01 | 8 | 2 tasks | 4 files |
 | Phase 04 P02 | 12 | 2 tasks | 3 files |
 | Phase 04 P03 | 3 | 1 tasks | 2 files |
+| Phase 05 P01 | 6 | 2 tasks | 9 files |
 
 ## Session
 
-**Last session:** 2026-03-21T16:29:55.525Z
-**Stopped at:** Completed 04-03-PLAN.md
+**Last session:** 2026-03-21T17:36:01.992Z
+**Stopped at:** Completed 05-01-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
