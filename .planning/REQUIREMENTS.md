@@ -32,13 +32,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Time Management (TIME)
 
-- [ ] **TIME-01**: "Add more time" button visible on in-progress jobs for driver/technician
-- [ ] **TIME-02**: Required reason field when requesting time extension
-- [ ] **TIME-03**: Impact analysis — system calculates which subsequent jobs/drivers are affected
-- [ ] **TIME-04**: System generates 2-3 rescheduling suggestions for affected jobs
-- [ ] **TIME-05**: Scheduler receives notification of time extension request
-- [ ] **TIME-06**: Scheduler approves/denies extension with one of the suggested options or custom
-- [ ] **TIME-07**: All affected parties notified of schedule changes after approval
+- [x] **TIME-01**: "Add more time" button visible on in-progress jobs for driver/technician
+- [x] **TIME-02**: Required reason field when requesting time extension
+- [x] **TIME-03**: Impact analysis — system calculates which subsequent jobs/drivers are affected
+- [x] **TIME-04**: System generates 2-3 rescheduling suggestions for affected jobs
+- [x] **TIME-05**: Scheduler receives notification of time extension request
+- [x] **TIME-06**: Scheduler approves/denies extension with one of the suggested options or custom
+- [x] **TIME-07**: All affected parties notified of schedule changes after approval
 
 ### Job Assignment & Load Balancing (ASGN)
 

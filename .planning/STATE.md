@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 05-03-PLAN.md
-last_updated: "2026-03-21T17:50:02.171Z"
+stopped_at: Completed 06-01-PLAN.md
+last_updated: "2026-03-21T18:21:22.725Z"
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 17
-  completed_plans: 17
+  total_plans: 20
+  completed_plans: 18
   percent: 100
 ---
 
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Schedulers can efficiently assign, monitor, and adjust jobs in real-time so no job falls through the cracks
-**Current focus:** Phase 05 — notifications-alerts
+**Current focus:** Phase 06 — time-management
 
 ## Milestone: v1.0
 
-**Status:** Executing Phase 05
+**Status:** Executing Phase 06
 **Phases:** 9 total
 **Requirements:** 62 v1 requirements mapped across all phases
 
 ## Current Phase
 
-**Phase:** 5
+**Phase:** 6
 **Status:** Complete (02-01, 02-02, 02-03 all complete)
 **Current Plan:** 1
 **Requirements:** USR-01 to SCHED-04
@@ -116,6 +116,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | Future.microtask pattern used in initState for async provider calls — standard Flutter pattern for post-frame async work | 05-03 NOTIF |
 | 2026-03-21 | PATCH method added to ApiService — required for markRead/markAllRead API calls, missing method was a blocking gap | 05-03 NOTIF |
 | 2026-03-21 | NotificationBell placed first in AppBar actions — most accessible position for primary notification UX | 05-03 NOTIF |
+| 2026-03-21 | FOR UPDATE one-active-request guard in createRequest — prevents double-booking race on concurrent extension requests | 06-01 TIME |
+| 2026-03-21 | analyzeImpact covers both driver (job_technicians) and vehicle (job_assignments) overlap — full conflict detection | 06-01 TIME |
+| 2026-03-21 | Notifications sent after transaction commit in approveRequest — same pattern as all other services, audit never blocks commit | 06-01 TIME |
 
 ## Performance Metrics
 
@@ -139,11 +142,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 05 P01 | 6 | 2 tasks | 9 files |
 | Phase 05 P02 | 7 | 3 tasks | 8 files |
 | Phase 05 P03 | 8 | 2 tasks | 9 files |
+| Phase 06 P01 | 4 | 2 tasks | 4 files |
 
 ## Session
 
-**Last session:** 2026-03-21T17:50:02.166Z
-**Stopped at:** Completed 05-03-PLAN.md
+**Last session:** 2026-03-21T18:21:22.720Z
+**Stopped at:** Completed 06-01-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
