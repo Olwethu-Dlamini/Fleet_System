@@ -21,6 +21,7 @@ import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/models/vehicle.dart';
 import 'package:vehicle_scheduling_app/services/vehicle_service.dart';
+import 'package:vehicle_scheduling_app/screens/vehicles/vehicle_maintenance_screen.dart';
 
 class VehiclesListScreen extends StatefulWidget {
   const VehiclesListScreen({super.key});
@@ -263,6 +264,28 @@ class _VehiclesListScreenState extends State<VehiclesListScreen> {
                                                   ),
                                                 ),
                                               ),
+                                              // In Maintenance badge
+                                              if (vehicle.isInMaintenance) ...[
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: Colors.orange.shade700,
+                                                    borderRadius: BorderRadius.circular(12),
+                                                  ),
+                                                  child: const Text(
+                                                    'In Maintenance',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 6),
+                                              ],
                                               // Status pill
                                               Container(
                                                 padding:
@@ -336,82 +359,143 @@ class _VehiclesListScreenState extends State<VehiclesListScreen> {
                                   ],
                                 ),
 
-                                // Admin action row
-                                if (canManage) ...[
+                                // Maintenance action row (permission-gated)
+                                Builder(
+                                  builder: (ctx) {
+                                    final authProv = ctx.read<AuthProvider>();
+                                    final canCreateMaint = authProv.hasPermission('maintenance:create');
+                                    final canReadMaint = authProv.hasPermission('maintenance:read');
+                                    if (!canCreateMaint && !canReadMaint) {
+                                      return const SizedBox.shrink();
+                                    }
+                                    return Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            if (canCreateMaint)
+                                              TextButton.icon(
+                                                onPressed: () => Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => VehicleMaintenanceScreen(vehicle: vehicle),
+                                                  ),
+                                                ),
+                                                icon: const Icon(Icons.build, size: 15),
+                                                label: const Text(
+                                                  'Schedule Maintenance',
+                                                  style: TextStyle(fontSize: 12),
+                                                ),
+                                                style: TextButton.styleFrom(
+                                                  foregroundColor: Colors.orange.shade700,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                ),
+                                              ),
+                                            if (canReadMaint && !canCreateMaint)
+                                              TextButton.icon(
+                                                onPressed: () => Navigator.push(
+                                                  context,
+                                                  MaterialPageRoute(
+                                                    builder: (_) => VehicleMaintenanceScreen(vehicle: vehicle),
+                                                  ),
+                                                ),
+                                                icon: const Icon(Icons.history, size: 15),
+                                                label: const Text(
+                                                  'View Maintenance',
+                                                  style: TextStyle(fontSize: 12),
+                                                ),
+                                                style: TextButton.styleFrom(
+                                                  foregroundColor: AppTheme.primaryColor,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+
+                                // Vehicle management action row (permission-gated)
+                                if (auth.hasPermission('vehicles:update') || auth.hasPermission('vehicles:delete')) ...[
                                   const SizedBox(height: 10),
                                   const Divider(height: 1),
                                   const SizedBox(height: 6),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
-                                      // Toggle active/inactive
-                                      TextButton.icon(
-                                        onPressed: () => _toggleActive(vehicle),
-                                        icon: Icon(
-                                          isActive
-                                              ? Icons.pause_circle_outline
-                                              : Icons.play_circle_outline,
-                                          size: 16,
-                                        ),
-                                        label: Text(
-                                          isActive
-                                              ? 'Deactivate'
-                                              : 'Reactivate',
-                                          style: const TextStyle(fontSize: 12),
-                                        ),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: isActive
-                                              ? AppTheme.warningColor
-                                              : AppTheme.successColor,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
+                                      // Toggle active/inactive — vehicles:update
+                                      if (auth.hasPermission('vehicles:update'))
+                                        TextButton.icon(
+                                          onPressed: () => _toggleActive(vehicle),
+                                          icon: Icon(
+                                            isActive
+                                                ? Icons.pause_circle_outline
+                                                : Icons.play_circle_outline,
+                                            size: 16,
+                                          ),
+                                          label: Text(
+                                            isActive
+                                                ? 'Deactivate'
+                                                : 'Reactivate',
+                                            style: const TextStyle(fontSize: 12),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: isActive
+                                                ? AppTheme.warningColor
+                                                : AppTheme.successColor,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      // Edit
-                                      TextButton.icon(
-                                        onPressed: () =>
-                                            _openForm(vehicle: vehicle),
-                                        icon: const Icon(
-                                          Icons.edit_outlined,
-                                          size: 16,
-                                        ),
-                                        label: const Text(
-                                          'Edit',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor:
-                                              AppTheme.primaryColor,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
+                                      // Edit — vehicles:update
+                                      if (auth.hasPermission('vehicles:update'))
+                                        TextButton.icon(
+                                          onPressed: () =>
+                                              _openForm(vehicle: vehicle),
+                                          icon: const Icon(
+                                            Icons.edit_outlined,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'Edit',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor:
+                                                AppTheme.primaryColor,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
                                           ),
                                         ),
-                                      ),
 
-                                      // Delete
-                                      TextButton.icon(
-                                        onPressed: () =>
-                                            _confirmDelete(vehicle),
-                                        icon: const Icon(
-                                          Icons.delete_outline,
-                                          size: 16,
-                                        ),
-                                        label: const Text(
-                                          'Delete',
-                                          style: TextStyle(fontSize: 12),
-                                        ),
-                                        style: TextButton.styleFrom(
-                                          foregroundColor: AppTheme.errorColor,
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
+                                      // Delete — vehicles:delete
+                                      if (auth.hasPermission('vehicles:delete'))
+                                        TextButton.icon(
+                                          onPressed: () =>
+                                              _confirmDelete(vehicle),
+                                          icon: const Icon(
+                                            Icons.delete_outline,
+                                            size: 16,
+                                          ),
+                                          label: const Text(
+                                            'Delete',
+                                            style: TextStyle(fontSize: 12),
+                                          ),
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: AppTheme.errorColor,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
                                           ),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 ],

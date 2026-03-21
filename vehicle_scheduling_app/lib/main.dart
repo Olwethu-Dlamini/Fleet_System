@@ -22,6 +22,7 @@ import 'package:vehicle_scheduling_app/screens/jobs/scheduler_screen.dart';
 import 'package:vehicle_scheduling_app/screens/vehicles/vehicles_list_screen.dart';
 import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
 import 'package:vehicle_scheduling_app/screens/reports/reports_screen.dart'; // ← NEW
+import 'package:vehicle_scheduling_app/screens/settings/admin_settings_screen.dart';
 
 void main() {
   runApp(
@@ -105,7 +106,7 @@ class _AuthGateState extends State<AuthGate> {
 //
 // Tab layout per role:
 //
-//   admin      → Dashboard | Jobs | Vehicles | Schedule | Users | Reports
+//   admin      → Dashboard | Jobs | Vehicles | Schedule | Users | Reports | Settings
 //   scheduler  → Dashboard | Jobs | Vehicles | Schedule
 //   technician → Dashboard | My Jobs
 // ============================================
@@ -157,7 +158,9 @@ class _MainAppState extends State<MainApp> {
         const VehiclesListScreen(), // 2
         const SchedulerScreen(), // 3
         const UsersScreen(), // 4
-        const ReportsScreen(), // 5  ← NEW
+        const ReportsScreen(), // 5
+        if (auth.hasPermission('settings:read'))
+          const AdminSettingsScreen(), // 6
       ];
     }
 
@@ -217,11 +220,16 @@ class _MainAppState extends State<MainApp> {
           label: 'Users',
         ),
         BottomNavigationBarItem(
-          // ← NEW
           icon: Icon(Icons.bar_chart_outlined),
           activeIcon: Icon(Icons.bar_chart),
           label: 'Reports',
         ),
+        if (auth.hasPermission('settings:read'))
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.settings_outlined),
+            activeIcon: Icon(Icons.settings),
+            label: 'Settings',
+          ),
       ];
     }
 
