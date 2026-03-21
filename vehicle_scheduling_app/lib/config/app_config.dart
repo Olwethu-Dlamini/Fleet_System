@@ -132,6 +132,13 @@ class AppConfig {
   // PUT /api/settings/:key
   static const String settingsEndpoint = '/settings';
 
+  // TIME EXTENSIONS
+  // POST  /api/time-extensions
+  // GET   /api/time-extensions/:jobId
+  // PATCH /api/time-extensions/:id/approve
+  // PATCH /api/time-extensions/:id/deny
+  static const String timeExtensionsEndpoint = '/time-extensions';
+
   // ==========================================
   // NETWORK CONFIG
   // ==========================================
