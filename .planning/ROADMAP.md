@@ -172,7 +172,13 @@ Plans:
 - [ ] In-app notification center shows history with read/unread
 - [ ] Notifications respect tenant isolation
 
-**Estimated plans:** 3
+
+**Plans:** 3 plans
+
+Plans:
+- [ ] 05-01-PLAN.md -- Backend: DB migration (notifications + preferences tables), Firebase config, notification/email services, cron extensions, notification API routes
+- [ ] 05-02-PLAN.md -- FCM integration: Flutter FCM service + Android config, login token registration, backend topic subscription
+- [ ] 05-03-PLAN.md -- Flutter UI: notification model/provider/service, bell icon with badge, notification center screen
 
 ---
 
