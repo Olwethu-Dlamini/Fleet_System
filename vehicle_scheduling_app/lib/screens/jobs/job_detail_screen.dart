@@ -40,6 +40,7 @@ import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/edit_job_screen.dart';
+import 'package:vehicle_scheduling_app/screens/time_management/time_extension_request_screen.dart';
 import 'package:vehicle_scheduling_app/services/user_service.dart';
 
 class _DriverOption {
@@ -1553,6 +1554,65 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                               fontWeight: FontWeight.w600,
                             ),
                           ),
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+
+              // ── ADD MORE TIME BUTTON (Phase 06 — TIME-01/02/03/04) ────
+              // Visible ONLY to the assigned driver/technician when the job
+              // is in_progress. Guards the one-active-request constraint by
+              // relying on the backend (which uses FOR UPDATE to block
+              // concurrent requests from the same job).
+              Builder(
+                builder: (context) {
+                  final currentUserId = auth.user?.id;
+                  final isAssigned = currentUserId != null &&
+                      (_job.driverId == currentUserId ||
+                          _job.technicians.any((t) => t.id == currentUserId));
+                  final showAddTimeButton =
+                      isAssigned && _job.currentStatus == 'in_progress';
+
+                  if (!showAddTimeButton) return const SizedBox.shrink();
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.more_time),
+                          label: const Text(
+                            'Add More Time',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          onPressed: () async {
+                            final result = await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => TimeExtensionRequestScreen(
+                                  jobId: _job.id,
+                                  jobNumber: _job.jobNumber,
+                                ),
+                              ),
+                            );
+                            if (result == true && mounted) {
+                              // Reload job details to reflect any status change
+                              context.read<JobProvider>().loadJobById(_job.id);
+                            }
+                          },
                         ),
                       ),
                     ],
