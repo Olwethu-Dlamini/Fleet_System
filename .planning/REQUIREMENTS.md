@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **FOUND-07**: Set `TZ=UTC` in Docker and add `tenant_timezone` field
 - [x] **FOUND-08**: Fix `GROUP_CONCAT` truncation — set `group_concat_max_len=65536` per connection
 - [x] **FOUND-09**: Add database indexes on `scheduled_date`, `current_status`, `tenant_id`
-- [ ] **FOUND-10**: Replace `console.log` with structured logging (pino)
+- [x] **FOUND-10**: Replace `console.log` with structured logging (pino)
 
 ### Notifications & Alerts (NOTIF)
 
