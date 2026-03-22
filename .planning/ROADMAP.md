@@ -14,7 +14,7 @@
 | 4 | Dashboard & Views | 3/3 | Complete   | 2026-03-21 |
 | 5 | Notifications & Alerts | 3/3 | Complete   | 2026-03-21 |
 | 6 | Time Management | 3/3 | Complete   | 2026-03-21 |
-| 7 | GPS, Maps & Live Tracking | 2/2 | Complete   | 2026-03-22 |
+| 7 | GPS, Maps & Live Tracking | 2/4 | In Progress | 2026-03-22 |
 | 8 | Testing Suite | TEST-01–05 | MEDIUM | All features complete (Phases 1–7) |
 | 9 | Documentation & Deployment | DOC-01–05 | LOW | Phase 8 (tests passing) |
 
@@ -143,8 +143,8 @@ Plans:
 **Plans:** 3/3 plans complete
 
 Plans:
-- [x] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency� Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
-- [x] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter� Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
+- [x] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
+- [x] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
 
 ---
 
@@ -242,7 +242,13 @@ Plans:
 - [ ] Consent screen shown before tracking begins
 - [ ] Admin can toggle scheduler's GPS visibility
 
-**Estimated plans:** 4–5
+**Plans:** 4 plans (2 complete, 2 gap closure)
+
+Plans:
+- [x] 07-01-PLAN.md — Backend GPS infrastructure: Socket.IO, in-memory cache, consent API, working hours enforcement, 5-min cron flush
+- [x] 07-02-PLAN.md — Google Routes API backend proxy + Flutter JobMapWidget with polyline, ETA, distance on job detail
+- [ ] 07-03-PLAN.md — Gap closure: Flutter GPS consent screen, post-login consent gate, GpsProvider with 30-second location timer (GPS-06, GPS-02)
+- [ ] 07-04-PLAN.md — Gap closure: Flutter live tracking map screen with driver markers, Tracking tab in admin/scheduler nav (GPS-03)
 
 ---
 
@@ -290,11 +296,7 @@ Plans:
 - [ ] New deployment can be stood up following the guide alone
 - [ ] Documentation reviewed for accuracy
 
-**Plans:** 2/2 plans complete
-
-Plans:
-- [x] 04-01-PLAN.md -- Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency� Backend chart-data endpoint, dashboard route security fixes (verifyToken + tenant_id), fl_chart dependency
-- [x] 04-02-PLAN.md -- Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter� Flutter UI: bar chart card, badge overlays, drivers/clients toggle, weekend filter
+**Estimated plans:** 2
 
 ---
 
@@ -331,3 +333,4 @@ Phase 9 (Docs) ←── Phase 8
 *Phase 2 plans created: 2026-03-21*
 *Phase 3 plans created: 2026-03-21*
 *Phase 4 plans created: 2026-03-21*
+*Phase 7 gap closure plans created: 2026-03-22*
