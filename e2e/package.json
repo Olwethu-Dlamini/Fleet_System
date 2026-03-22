@@ -1,0 +1,11 @@
+{
+  "name": "fleet-scheduler-e2e",
+  "private": true,
+  "scripts": {
+    "test": "npx playwright test",
+    "test:report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2"
+  }
+}
