@@ -37,11 +37,9 @@ class _GpsConsentScreenState extends State<GpsConsentScreen> {
     setState(() => _submitting = false);
 
     if (success) {
-      // Pop the consent gate and continue to the main app
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        '/',
-        (route) => false,
-      );
+      // Pop the consent gate — AuthGate will re-render with consentGranted=true
+      // and route to MainApp automatically.
+      if (mounted) Navigator.of(context).maybePop();
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -68,11 +66,8 @@ class _GpsConsentScreenState extends State<GpsConsentScreen> {
     if (!mounted) return;
     setState(() => _submitting = false);
 
-    // Proceed to main app without GPS
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      '/',
-      (route) => false,
-    );
+    // Proceed to main app without GPS — AuthGate re-renders to MainApp
+    Navigator.of(context).maybePop();
   }
 
   // ==========================================

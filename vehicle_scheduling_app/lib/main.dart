@@ -16,6 +16,8 @@ import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
 import 'package:vehicle_scheduling_app/providers/time_extension_provider.dart';
+import 'package:vehicle_scheduling_app/providers/gps_provider.dart';
+import 'package:vehicle_scheduling_app/screens/gps/gps_consent_screen.dart';
 import 'package:vehicle_scheduling_app/screens/login_screen.dart';
 import 'package:vehicle_scheduling_app/screens/dashboard/dashboard_screen.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/jobs_list_screen.dart';
@@ -45,6 +47,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => VehicleProvider()),
         ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ChangeNotifierProvider(create: (_) => TimeExtensionProvider()),
+        ChangeNotifierProvider(create: (_) => GpsProvider()),
       ],
       child: const VehicleSchedulingApp(),
     ),
@@ -110,6 +113,32 @@ class _AuthGateState extends State<AuthGate> {
 
     if (auth.status == AuthStatus.unauthenticated) {
       return const LoginScreen();
+    }
+
+    // ── GPS consent gate for driver/technician roles ──────────────
+    // Admin and scheduler bypass consent entirely.
+    if (auth.isTechnician) {
+      final gps = context.watch<GpsProvider>();
+
+      // Trigger consent check if not done yet — use microtask to
+      // avoid calling async work directly during the build phase.
+      if (!gps.consentChecked) {
+        Future.microtask(() => gps.checkConsent());
+        return const Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        );
+      }
+
+      // Consent not yet granted — show the POPIA consent screen.
+      if (gps.needsConsent) {
+        return const GpsConsentScreen();
+      }
+
+      // Consent resolved — start location timer if GPS is enabled
+      // and the timer is not already running.
+      if (gps.gpsEnabled && !gps.isTimerRunning) {
+        Future.microtask(() => gps.startLocationTimer());
+      }
     }
 
     return const MainApp();

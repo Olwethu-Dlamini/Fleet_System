@@ -49,6 +49,8 @@ import 'package:vehicle_scheduling_app/screens/jobs/job_detail_screen.dart';
 import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
 import 'package:vehicle_scheduling_app/widgets/common/notification_bell.dart';
 import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
+import 'package:vehicle_scheduling_app/providers/gps_provider.dart';
+import 'package:vehicle_scheduling_app/screens/gps/gps_consent_screen.dart';
 
 // ── Pattern types for stat card decorative art ─────────────────
 enum _PatternType { circles, dots, waves, diagonal }
@@ -322,6 +324,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
         title: const Text('Dashboard'),
         actions: [
           const NotificationBell(),
+          // GPS status icon — driver/technician only
+          if (auth.isTechnician) ...[
+            IconButton(
+              icon: Icon(
+                context.watch<GpsProvider>().gpsEnabled
+                    ? Icons.gps_fixed
+                    : Icons.gps_off,
+                color: context.watch<GpsProvider>().gpsEnabled
+                    ? Colors.green
+                    : Colors.grey,
+              ),
+              tooltip: 'GPS Settings',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const GpsConsentScreen(isManageMode: true),
+                ),
+              ),
+            ),
+          ],
           if (auth.isAdmin)
             IconButton(
               icon: const Icon(Icons.people_outlined),
