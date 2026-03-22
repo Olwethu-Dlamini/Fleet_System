@@ -21,6 +21,57 @@ const log    = logger.child({ service: 'job-assignment-route' });
  * Note: Auth middleware is applied globally in server.js for /api/* routes
  */
 
+/**
+ * @swagger
+ * /job-assignments/driver-load:
+ *   get:
+ *     tags: [Job Assignments]
+ *     summary: Get driver load statistics for load-balanced assignment
+ *     description: Returns all active drivers with job_count, rank, and a below_average flag. Used by the Flutter assignment picker to highlight under-loaded drivers with a green glow (ASGN-01, ASGN-02).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: range
+ *         schema:
+ *           type: string
+ *           enum: [weekly, monthly, yearly]
+ *           default: weekly
+ *         description: Time range for job count calculation
+ *     responses:
+ *       200:
+ *         description: Driver load stats retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/DriverLoad'
+ *       400:
+ *         description: Invalid range parameter
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/job-assignments/driver-load
 // PURPOSE: Return all active drivers with job_count, rank, and below_average
@@ -42,6 +93,72 @@ router.get('/driver-load', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /job-assignments/assign:
+ *   post:
+ *     tags: [Job Assignments]
+ *     summary: Assign a vehicle to a job
+ *     description: Creates a job assignment record linking a vehicle (and optionally drivers) to a job. Checks for vehicle availability conflicts before assigning.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_id, vehicle_id, assigned_by]
+ *             properties:
+ *               job_id:
+ *                 type: integer
+ *                 example: 5
+ *               vehicle_id:
+ *                 type: integer
+ *                 example: 2
+ *               technician_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 7]
+ *               notes:
+ *                 type: string
+ *                 example: Priority assignment
+ *               assigned_by:
+ *                 type: integer
+ *                 example: 1
+ *     responses:
+ *       200:
+ *         description: Vehicle assigned to job
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 assignment:
+ *                   $ref: '#/components/schemas/Assignment'
+ *       400:
+ *         description: Validation error or conflict
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/job-assignments/assign
 // PURPOSE: Assign a vehicle to a job
@@ -62,6 +179,52 @@ router.get('/driver-load', verifyToken, async (req, res) => {
 // ✅ FIX: Removed authMiddleware - auth is handled at app level in server.js
 router.post('/assign', JobAssignmentController.assignJob);
 
+/**
+ * @swagger
+ * /job-assignments/unassign:
+ *   post:
+ *     tags: [Job Assignments]
+ *     summary: Remove vehicle assignment from a job
+ *     description: Removes the vehicle assignment from the specified job.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_id]
+ *             properties:
+ *               job_id:
+ *                 type: integer
+ *                 example: 5
+ *     responses:
+ *       200:
+ *         description: Vehicle unassigned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Missing job_id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/job-assignments/unassign
 // PURPOSE: Remove vehicle assignment from a job
@@ -69,6 +232,79 @@ router.post('/assign', JobAssignmentController.assignJob);
 // ✅ FIX: Removed authMiddleware - auth is handled at app level
 router.post('/unassign', JobAssignmentController.unassignJob);
 
+/**
+ * @swagger
+ * /job-assignments/check-conflict:
+ *   post:
+ *     tags: [Job Assignments]
+ *     summary: Check if a vehicle is available for a time slot
+ *     description: Checks whether a vehicle has scheduling conflicts for the given date and time window. Pass exclude_job_id when editing an existing job to exclude its own assignment from the conflict check.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [vehicle_id, scheduled_date, scheduled_time_start, scheduled_time_end]
+ *             properties:
+ *               vehicle_id:
+ *                 type: integer
+ *                 example: 2
+ *               scheduled_date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-25'
+ *               scheduled_time_start:
+ *                 type: string
+ *                 example: '09:00:00'
+ *               scheduled_time_end:
+ *                 type: string
+ *                 example: '11:00:00'
+ *               exclude_job_id:
+ *                 type: integer
+ *                 example: 5
+ *     responses:
+ *       200:
+ *         description: Availability result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 available:
+ *                   type: boolean
+ *                   example: true
+ *                 conflicts:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 message:
+ *                   type: string
+ *                   example: Vehicle is available for this time slot
+ *       400:
+ *         description: Missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/job-assignments/check-conflict
 // PURPOSE: Check if vehicle is available for time slot
@@ -134,12 +370,117 @@ router.post('/check-conflict', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /job-assignments/{jobId}/technicians:
+ *   put:
+ *     tags: [Job Assignments]
+ *     summary: Assign technicians to a job
+ *     description: Assigns one or more technicians to a job. Admin can use force_override to bypass conflict checks and move drivers from their current assignments.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [technician_ids, assigned_by]
+ *             properties:
+ *               technician_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 7]
+ *               assigned_by:
+ *                 type: integer
+ *                 example: 1
+ *               force_override:
+ *                 type: boolean
+ *                 example: false
+ *     responses:
+ *       200:
+ *         description: Technicians assigned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error or conflict
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // PUT /api/job-assignments/:jobId/technicians
 // verifyToken is applied explicitly here (not relying on server.js global auth)
 // because req.user.role is needed in the controller to gate force-override.
 // Pattern matches users.js — verifyToken inline on every route that needs req.user.
 router.put('/:jobId/technicians', verifyToken, JobAssignmentController.assignTechnicians);
 
+/**
+ * @swagger
+ * /job-assignments/vehicle/{vehicle_id}:
+ *   get:
+ *     tags: [Job Assignments]
+ *     summary: Get all assignments for a specific vehicle
+ *     description: Returns all job assignments for a given vehicle. Useful for viewing a vehicle's workload history.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: vehicle_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Assignments retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 assignments:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Assignment'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/job-assignments/vehicle/:vehicle_id
 // PURPOSE: Get all assignments for a specific vehicle

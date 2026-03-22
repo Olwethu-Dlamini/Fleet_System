@@ -28,6 +28,7 @@ const logger  = require('../config/logger');
 const log     = logger.child({ service: 'reports-route' });
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
+// All reports routes require authentication and scheduler or admin role
 router.use(verifyToken, schedulerOrAbove);
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -49,6 +50,62 @@ function parseDateRange(query) {
 /** Zero-pad helper so we never get "undefined" in SQL strings. */
 const safe = (v, fallback = 0) => (v === null || v === undefined ? fallback : v);
 
+/**
+ * @swagger
+ * /reports/summary:
+ *   get:
+ *     tags: [Reports]
+ *     summary: KPI overview cards
+ *     description: Returns key performance indicators for a date range — total jobs, completion rate, cancellation rate, active vehicles and technicians. Defaults to last 30 days.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (YYYY-MM-DD, default 30 days ago)
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (YYYY-MM-DD, default today)
+ *     responses:
+ *       200:
+ *         description: KPI summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 period:
+ *                   type: object
+ *                 summary:
+ *                   type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Scheduler or admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/summary
 // Quick KPI cards for the top of the Reports screen.
@@ -131,6 +188,54 @@ router.get('/summary', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/jobs-by-vehicle:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Per-vehicle job breakdown
+ *     description: Returns job counts and completion rates for each active vehicle in the date range.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Per-vehicle breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 vehicles:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/jobs-by-vehicle
 // Per-vehicle job counts, status breakdown, most recent job date.
@@ -197,6 +302,54 @@ router.get('/jobs-by-vehicle', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/jobs-by-technician:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Per-technician job breakdown
+ *     description: Returns job counts, completion rates, and job type breakdown per technician for the date range.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Per-technician breakdown
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 technicians:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/jobs-by-technician
 // Per-technician job counts, completion rate, cancellations.
@@ -265,6 +418,54 @@ router.get('/jobs-by-technician', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/jobs-by-type:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Jobs breakdown by type
+ *     description: Returns job counts grouped by job type (installation, delivery, miscellaneous) with status sub-counts.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Jobs by type
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 byType:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/jobs-by-type
 // Breakdown by job_type with status sub-counts.
@@ -312,6 +513,61 @@ router.get('/jobs-by-type', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/cancellations:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Cancelled job detail
+ *     description: Returns cancelled jobs with who cancelled them, which vehicle and technicians were assigned, and the cancellation reason. Also returns a reason summary.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Cancellations report
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 total:
+ *                   type: integer
+ *                   example: 3
+ *                 byReason:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 jobs:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/cancellations
 // Cancelled job detail — who cancelled, which technician, vehicle, reason.
@@ -415,6 +671,66 @@ router.get('/cancellations', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/daily-volume:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Jobs per calendar day (chart data)
+ *     description: Returns job counts grouped by scheduled date. Used to populate line/bar charts.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Daily volume data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 days:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       date:
+ *                         type: string
+ *                         format: date
+ *                       total:
+ *                         type: integer
+ *                       completed:
+ *                         type: integer
+ *                       cancelled:
+ *                         type: integer
+ *                       active:
+ *                         type: integer
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/daily-volume
 // Jobs created/scheduled per calendar day — for the line/bar chart.
@@ -455,6 +771,54 @@ router.get('/daily-volume', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/vehicle-utilisation:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Vehicle utilisation percentages
+ *     description: Shows how often each vehicle was in use (distinct scheduled days / total days in range as a percentage). Includes only active vehicles.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Vehicle utilisation data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 vehicles:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/vehicle-utilisation
 // For each vehicle: how many distinct days it was scheduled vs total days
@@ -511,6 +875,54 @@ router.get('/vehicle-utilisation', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/technician-performance:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Technician performance metrics
+ *     description: Returns completion rate, cancellation rate, job type breakdown, and priority distribution per technician.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Technician performance data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 technicians:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/technician-performance
 // Completion rate, cancellation rate, jobs per type, busiest days.
@@ -581,6 +993,72 @@ router.get('/technician-performance', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/executive-dashboard:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Full executive dashboard (all reports in one call)
+ *     description: Returns summary, vehicles, technicians, by-type, daily volume, and utilisation all in a single optimised call using parallel queries. Used by the Flutter Reports screen on initial load.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *     responses:
+ *       200:
+ *         description: Executive dashboard data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 summary:
+ *                   type: object
+ *                 vehicles:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 technicians:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 byType:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 dailyVolume:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 utilisation:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/reports/executive-dashboard
 // Everything in a single call — used by the Flutter Reports screen on load.

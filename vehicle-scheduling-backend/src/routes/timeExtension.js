@@ -23,6 +23,87 @@ function validate(req, res) {
   return true;
 }
 
+/**
+ * @swagger
+ * /time-extensions:
+ *   post:
+ *     tags: [Time Extensions]
+ *     summary: Create a time extension request
+ *     description: Allows an assigned technician/driver to request additional time on an in-progress job. Returns affected jobs and 2-3 rescheduling suggestions for scheduler review.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_id, duration_minutes, reason]
+ *             properties:
+ *               job_id:
+ *                 type: integer
+ *                 example: 5
+ *               duration_minutes:
+ *                 type: integer
+ *                 minimum: 1
+ *                 maximum: 480
+ *                 example: 30
+ *               reason:
+ *                 type: string
+ *                 minLength: 10
+ *                 example: Water damage discovered under flooring
+ *     responses:
+ *       201:
+ *         description: Extension request created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 request:
+ *                   $ref: '#/components/schemas/TimeExtensionRequest'
+ *                 affectedJobs:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 suggestions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/RescheduleOption'
+ *       400:
+ *         description: Validation error or job not in_progress
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Not assigned to this job
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Active request already exists for this job
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // POST /api/time-extensions
 // Create a time extension request
@@ -94,6 +175,53 @@ router.post(
   }
 );
 
+/**
+ * @swagger
+ * /time-extensions/{jobId}:
+ *   get:
+ *     tags: [Time Extensions]
+ *     summary: Get active time extension request for a job
+ *     description: Returns the pending extension request for the specified job (if any), along with current rescheduling suggestions.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     responses:
+ *       200:
+ *         description: Active request (or null if none)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 request:
+ *                   nullable: true
+ *                   $ref: '#/components/schemas/TimeExtensionRequest'
+ *                 suggestions:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/RescheduleOption'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/time-extensions/:jobId
 // Get active (pending) extension request for a job
@@ -128,6 +256,82 @@ router.get(
   }
 );
 
+/**
+ * @swagger
+ * /time-extensions/{id}/approve:
+ *   patch:
+ *     tags: [Time Extensions]
+ *     summary: Approve a time extension request
+ *     description: Approves a time extension request. Optionally applies a specific rescheduling suggestion or custom time changes to affected jobs. Requires jobs:update permission (admin/scheduler).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Extension request ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               suggestion_id:
+ *                 type: integer
+ *                 nullable: true
+ *                 example: 3
+ *               custom_changes:
+ *                 type: array
+ *                 nullable: true
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     jobId:
+ *                       type: integer
+ *                     newStart:
+ *                       type: string
+ *                     newEnd:
+ *                       type: string
+ *     responses:
+ *       200:
+ *         description: Extension approved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: jobs:update permission required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Extension request not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // PATCH /api/time-extensions/:id/approve
 // Approve a time extension request
@@ -183,6 +387,63 @@ router.patch(
   }
 );
 
+/**
+ * @swagger
+ * /time-extensions/{id}/deny:
+ *   patch:
+ *     tags: [Time Extensions]
+ *     summary: Deny a time extension request
+ *     description: Denies a time extension request. Optionally include a reason. Requires jobs:update permission (admin/scheduler).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Extension request ID
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 example: Schedule is fully booked
+ *     responses:
+ *       200:
+ *         description: Extension denied
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: jobs:update permission required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Extension request not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // PATCH /api/time-extensions/:id/deny
 // Deny a time extension request

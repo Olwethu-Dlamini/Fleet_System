@@ -19,6 +19,50 @@ const { verifyToken, requirePermission } = require('../middleware/authMiddleware
 const { body }  = require('express-validator');
 const validate  = require('../middleware/validate');
 
+/**
+ * @swagger
+ * /settings:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get all settings for the tenant
+ *     description: Returns all key-value settings for the authenticated user's tenant as a flat object. Requires settings:read permission (admin role).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Settings retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 settings:
+ *                   type: object
+ *                   example:
+ *                     scheduler_gps_visible: 'true'
+ *                     notifications_enabled: 'true'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: settings:read permission required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/settings
 // Returns all settings for the calling user's tenant
@@ -40,6 +84,65 @@ router.get('/', verifyToken, requirePermission('settings:read'), async (req, res
   }
 });
 
+/**
+ * @swagger
+ * /settings/{key}:
+ *   get:
+ *     tags: [Settings]
+ *     summary: Get a single setting by key
+ *     description: Returns the value for a single setting key. Requires settings:read permission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Setting key
+ *         example: scheduler_gps_visible
+ *     responses:
+ *       200:
+ *         description: Setting value
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 key:
+ *                   type: string
+ *                   example: scheduler_gps_visible
+ *                 value:
+ *                   type: string
+ *                   example: 'true'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Setting not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/settings/:key
 // Returns a single setting by key
@@ -65,6 +168,76 @@ router.get('/:key', verifyToken, requirePermission('settings:read'), async (req,
   }
 });
 
+/**
+ * @swagger
+ * /settings/{key}:
+ *   put:
+ *     tags: [Settings]
+ *     summary: Upsert a setting value
+ *     description: Creates or updates a setting value by key for the tenant. Requires settings:update permission (admin role).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Setting key
+ *         example: scheduler_gps_visible
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [value]
+ *             properties:
+ *               value:
+ *                 type: string
+ *                 example: 'true'
+ *     responses:
+ *       200:
+ *         description: Setting saved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 key:
+ *                   type: string
+ *                   example: scheduler_gps_visible
+ *                 value:
+ *                   type: string
+ *                   example: 'true'
+ *       400:
+ *         description: Value must be a string
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: settings:update permission required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // PUT /api/settings/:key
 // Upsert a setting value

@@ -45,6 +45,45 @@ const updateVehicleValidation = [
     .withMessage('status must be available, assigned, maintenance, or inactive'),
 ];
 
+/**
+ * @swagger
+ * /vehicles:
+ *   get:
+ *     tags: [Vehicles]
+ *     summary: List all vehicles
+ *     description: Returns all vehicles. Pass activeOnly=true to exclude deactivated vehicles.
+ *     parameters:
+ *       - in: query
+ *         name: activeOnly
+ *         schema:
+ *           type: string
+ *           enum: ['true', 'false']
+ *         description: If 'true', returns only active vehicles
+ *     responses:
+ *       200:
+ *         description: Vehicle list retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Vehicle'
+ *                 count:
+ *                   type: integer
+ *                   example: 5
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================================
 // GET /api/vehicles
 // ============================================================
@@ -57,6 +96,46 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /vehicles/{id}:
+ *   get:
+ *     tags: [Vehicles]
+ *     summary: Get a vehicle by ID
+ *     description: Returns a single vehicle record by its ID.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Vehicle found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Vehicle'
+ *       404:
+ *         description: Vehicle not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================================
 // GET /api/vehicles/:id
 // ============================================================
@@ -70,6 +149,86 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /vehicles:
+ *   post:
+ *     tags: [Vehicles]
+ *     summary: Create a vehicle (admin only)
+ *     description: Creates a new vehicle record. Requires admin role. License plate must be unique.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [vehicle_name, license_plate, vehicle_type]
+ *             properties:
+ *               vehicle_name:
+ *                 type: string
+ *                 example: Ford Transit 001
+ *               license_plate:
+ *                 type: string
+ *                 example: GP 123 ABC
+ *               vehicle_type:
+ *                 type: string
+ *                 enum: [van, truck, car]
+ *                 example: van
+ *               capacity_kg:
+ *                 type: number
+ *                 example: 1000
+ *               notes:
+ *                 type: string
+ *                 example: Requires 95 unleaded
+ *     responses:
+ *       201:
+ *         description: Vehicle created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Vehicle'
+ *                 message:
+ *                   type: string
+ *                   example: Vehicle created successfully
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: License plate already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================================
 // POST /api/vehicles  —  create  (admin only)
 // Body: { vehicle_name, license_plate, vehicle_type, capacity_kg?, notes? }
@@ -114,6 +273,94 @@ router.post('/', requireAdmin, createVehicleValidation, validate, async (req, re
   }
 });
 
+/**
+ * @swagger
+ * /vehicles/{id}:
+ *   put:
+ *     tags: [Vehicles]
+ *     summary: Update a vehicle (admin only)
+ *     description: Updates vehicle fields. Only provided fields are changed. Requires admin role.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Vehicle ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vehicle_name:
+ *                 type: string
+ *                 example: Ford Transit 001 (Updated)
+ *               license_plate:
+ *                 type: string
+ *                 example: GP 999 XYZ
+ *               status:
+ *                 type: string
+ *                 enum: [available, assigned, maintenance, inactive]
+ *               is_active:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       200:
+ *         description: Vehicle updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/Vehicle'
+ *                 message:
+ *                   type: string
+ *                   example: Vehicle updated successfully
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Vehicle not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: License plate already exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================================
 // PUT /api/vehicles/:id  —  update  (admin only)
 // Body: any subset of { vehicle_name, license_plate, vehicle_type,
@@ -142,6 +389,54 @@ router.put('/:id', requireAdmin, updateVehicleValidation, validate, async (req, 
   }
 });
 
+/**
+ * @swagger
+ * /vehicles/{id}:
+ *   delete:
+ *     tags: [Vehicles]
+ *     summary: Delete or deactivate a vehicle (admin only)
+ *     description: If the vehicle has existing assignments, it is soft-deleted (is_active=0) to preserve history. If no assignments exist, the row is physically removed. Requires admin role.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Vehicle deleted or deactivated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Vehicle not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================================
 // DELETE /api/vehicles/:id  —  soft-delete / deactivate  (admin only)
 // If vehicle has assignments → sets is_active = 0 (preserves history).

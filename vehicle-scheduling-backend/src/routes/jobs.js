@@ -76,6 +76,65 @@ const updateJobValidation = [
     .withMessage('priority must be low, normal, high, or urgent'),
 ];
 
+/**
+ * @swagger
+ * /jobs:
+ *   get:
+ *     tags: [Jobs]
+ *     summary: List jobs (role-scoped)
+ *     description: Returns all jobs for admin/scheduler roles. Technicians receive only their own assigned jobs. Supports optional filtering by status, job_type, and priority.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, assigned, in_progress, completed, cancelled]
+ *         description: Filter by job status
+ *       - in: query
+ *         name: job_type
+ *         schema:
+ *           type: string
+ *           enum: [installation, delivery, miscellaneous]
+ *         description: Filter by job type
+ *       - in: query
+ *         name: priority
+ *         schema:
+ *           type: string
+ *           enum: [low, normal, high, urgent]
+ *         description: Filter by priority
+ *     responses:
+ *       200:
+ *         description: Job list retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 jobs:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Job'
+ *                 count:
+ *                   type: integer
+ *                   example: 8
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/jobs
 // Admin / Scheduler  → all jobs
@@ -110,6 +169,53 @@ router.get('/', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /jobs/my-jobs:
+ *   get:
+ *     tags: [Jobs]
+ *     summary: Get current user's assigned jobs
+ *     description: Returns only the jobs assigned to the authenticated user (driver/technician). Equivalent to GET /jobs for technician roles but explicit.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, assigned, in_progress, completed, cancelled]
+ *         description: Filter by job status
+ *     responses:
+ *       200:
+ *         description: Jobs list retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 jobs:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Job'
+ *                 count:
+ *                   type: integer
+ *                   example: 3
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/jobs/my-jobs
 // Explicit endpoint for technician's own jobs.
@@ -130,6 +236,66 @@ router.get('/my-jobs', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /jobs/{id}:
+ *   get:
+ *     tags: [Jobs]
+ *     summary: Get a single job by ID
+ *     description: Returns job details. Technicians can only view jobs they are assigned to; accessing another job returns 403.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     responses:
+ *       200:
+ *         description: Job found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 job:
+ *                   $ref: '#/components/schemas/Job'
+ *       400:
+ *         description: Invalid job ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Technician not assigned to this job
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/jobs/:id
 // Any authenticated user can view a single job by ID.
@@ -173,6 +339,96 @@ router.get('/:id', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /jobs:
+ *   post:
+ *     tags: [Jobs]
+ *     summary: Create a new job
+ *     description: Creates a new job. Optionally include technician_ids to assign drivers immediately on creation.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_type, customer_name, customer_address, scheduled_date, scheduled_time_start, scheduled_time_end, estimated_duration_minutes]
+ *             properties:
+ *               job_type:
+ *                 type: string
+ *                 enum: [installation, delivery, miscellaneous]
+ *                 example: installation
+ *               customer_name:
+ *                 type: string
+ *                 example: Acme Corp
+ *               customer_address:
+ *                 type: string
+ *                 example: 123 Main St, Johannesburg
+ *               scheduled_date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-25'
+ *               scheduled_time_start:
+ *                 type: string
+ *                 example: '09:00'
+ *               scheduled_time_end:
+ *                 type: string
+ *                 example: '11:00'
+ *               estimated_duration_minutes:
+ *                 type: integer
+ *                 example: 120
+ *               priority:
+ *                 type: string
+ *                 enum: [low, normal, high, urgent]
+ *                 example: normal
+ *               destination_lat:
+ *                 type: number
+ *                 example: -26.2041
+ *               destination_lng:
+ *                 type: number
+ *                 example: 28.0473
+ *               technician_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 7]
+ *     responses:
+ *       201:
+ *         description: Job created successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 job:
+ *                   $ref: '#/components/schemas/Job'
+ *                 message:
+ *                   type: string
+ *                   example: Job created successfully
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/jobs
 // Create a new job.
@@ -192,6 +448,83 @@ router.post('/', verifyToken, createJobValidation, validate, async (req, res) =>
   }
 });
 
+/**
+ * @swagger
+ * /jobs/{id}/technicians:
+ *   put:
+ *     tags: [Jobs]
+ *     summary: Replace driver/technician list on a job
+ *     description: Replaces the full set of drivers/technicians assigned to a job. Does not change the vehicle assignment. Pass technician_ids as empty array to clear all drivers. Admin can send force_override=true to bypass scheduling conflicts.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [assigned_by]
+ *             properties:
+ *               technician_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 7]
+ *               assigned_by:
+ *                 type: integer
+ *                 example: 1
+ *               force_override:
+ *                 type: boolean
+ *                 description: Admin only — bypass scheduling conflict check
+ *                 example: false
+ *     responses:
+ *       200:
+ *         description: Technicians assigned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: 2 driver(s)/technician(s) assigned to job
+ *                 job:
+ *                   $ref: '#/components/schemas/Job'
+ *       400:
+ *         description: Invalid job ID or missing assigned_by
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // PUT /api/jobs/:id/technicians
 // Replace the full driver/technician list on a job.
@@ -276,6 +609,96 @@ router.put('/:id/technicians', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /jobs/{id}:
+ *   put:
+ *     tags: [Jobs]
+ *     summary: Update a job (full edit)
+ *     description: Updates all editable fields on a job. Requires admin or scheduler role.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [customer_name, customer_address, job_type, scheduled_date]
+ *             properties:
+ *               customer_name:
+ *                 type: string
+ *                 example: Acme Corp
+ *               customer_address:
+ *                 type: string
+ *                 example: 123 Main St
+ *               job_type:
+ *                 type: string
+ *                 enum: [installation, delivery, miscellaneous]
+ *               scheduled_date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-25'
+ *               scheduled_time_start:
+ *                 type: string
+ *                 example: '09:00:00'
+ *               scheduled_time_end:
+ *                 type: string
+ *                 example: '11:00:00'
+ *               estimated_duration_minutes:
+ *                 type: integer
+ *                 example: 120
+ *               priority:
+ *                 type: string
+ *                 enum: [low, normal, high, urgent]
+ *     responses:
+ *       200:
+ *         description: Job updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Job updated successfully
+ *                 job:
+ *                   $ref: '#/components/schemas/Job'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // PUT /api/jobs/:id  — Full job edit (admin / scheduler)
 // ==========================================
@@ -365,6 +788,84 @@ router.put('/:id', verifyToken, updateJobValidation, validate, async (req, res) 
   }
 });
 
+/**
+ * @swagger
+ * /jobs/{id}/schedule:
+ *   put:
+ *     tags: [Jobs]
+ *     summary: Update job schedule (date/time only)
+ *     description: Updates only the schedule fields (date, start time, end time, duration) without touching other job fields. Useful for rescheduling without a full edit.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scheduled_date]
+ *             properties:
+ *               scheduled_date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-26'
+ *               scheduled_time_start:
+ *                 type: string
+ *                 example: '10:00:00'
+ *               scheduled_time_end:
+ *                 type: string
+ *                 example: '12:00:00'
+ *               estimated_duration_minutes:
+ *                 type: integer
+ *                 example: 120
+ *     responses:
+ *       200:
+ *         description: Schedule updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Job schedule updated
+ *                 job:
+ *                   $ref: '#/components/schemas/Job'
+ *       400:
+ *         description: Invalid date format
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // PUT /api/jobs/:id/schedule  — Update time/date only
 // ==========================================
@@ -423,6 +924,69 @@ router.put('/:id/schedule', verifyToken, async (req, res) => {
 });
 
 
+/**
+ * @swagger
+ * /jobs/{id}/vehicle:
+ *   delete:
+ *     tags: [Jobs]
+ *     summary: Remove vehicle assignment from a job (admin only)
+ *     description: Unassigns the vehicle from the job. If the job status was 'assigned', it reverts to 'pending'. Only administrators can perform this action.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     responses:
+ *       200:
+ *         description: Vehicle unassigned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Vehicle unassigned. Job reverted to Pending.
+ *                 job:
+ *                   $ref: '#/components/schemas/Job'
+ *       400:
+ *         description: Invalid job ID
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // DELETE /api/jobs/:id/vehicle  — admin only
 // Removes the vehicle assignment from a job.
@@ -477,6 +1041,89 @@ router.delete('/:id/vehicle', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /jobs/{id}/swap-vehicle:
+ *   put:
+ *     tags: [Jobs]
+ *     summary: Swap vehicle on a job (scheduler/admin)
+ *     description: Swaps the vehicle assigned to a job with a new vehicle. Checks availability before swapping. Requires assignments:update permission (admin or scheduler).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [new_vehicle_id]
+ *             properties:
+ *               new_vehicle_id:
+ *                 type: integer
+ *                 example: 4
+ *               note:
+ *                 type: string
+ *                 example: Swapped due to breakdown
+ *     responses:
+ *       200:
+ *         description: Vehicle swapped successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Vehicle swapped successfully
+ *                 vehicle:
+ *                   $ref: '#/components/schemas/Vehicle'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job or vehicle not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Vehicle not available for this time slot
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // PUT /api/jobs/:id/swap-vehicle — SCHED-02
 // Scheduler or admin can swap the vehicle on an existing job assignment

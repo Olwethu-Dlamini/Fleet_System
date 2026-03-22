@@ -17,6 +17,80 @@ const logger = require('../config/logger').child({ service: 'jobStatusRoutes' })
  * Base URL: /api/job-status
  */
 
+/**
+ * @swagger
+ * /job-status/complete:
+ *   post:
+ *     tags: [Job Status]
+ *     summary: Complete a job with GPS capture
+ *     description: Marks a job as completed. Only assigned personnel or admin/scheduler can complete a job. Optionally captures GPS coordinates at completion for audit trail.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_id]
+ *             properties:
+ *               job_id:
+ *                 type: integer
+ *                 example: 5
+ *               lat:
+ *                 type: number
+ *                 example: -26.2041
+ *               lng:
+ *                 type: number
+ *                 example: 28.0473
+ *               accuracy_m:
+ *                 type: number
+ *                 example: 15.0
+ *               gps_status:
+ *                 type: string
+ *                 enum: [ok, low_accuracy, no_gps]
+ *                 example: ok
+ *     responses:
+ *       200:
+ *         description: Job completed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: Job completed successfully
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Missing job_id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: User not assigned to this job
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/job-status/complete
 // PURPOSE: STAT-02/03/04 — Complete a job with personnel check and GPS capture
@@ -76,6 +150,73 @@ router.post('/complete', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /job-status/update:
+ *   post:
+ *     tags: [Job Status]
+ *     summary: Update a job's status
+ *     description: Transitions a job to a new status. Validates that the transition is allowed based on the current status and state machine rules.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_id, new_status, changed_by]
+ *             properties:
+ *               job_id:
+ *                 type: integer
+ *                 example: 5
+ *               new_status:
+ *                 type: string
+ *                 enum: [pending, assigned, in_progress, completed, cancelled]
+ *                 example: in_progress
+ *               changed_by:
+ *                 type: integer
+ *                 example: 1
+ *               reason:
+ *                 type: string
+ *                 example: Driver started work
+ *               metadata:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Status updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Job status updated to 'in_progress' successfully"
+ *                 data:
+ *                   type: object
+ *       400:
+ *         description: Invalid transition
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/job-status/update
 // PURPOSE: Update a job's status
@@ -104,6 +245,56 @@ router.post('/complete', verifyToken, async (req, res) => {
  */
 router.post('/update', JobStatusController.updateStatus);
 
+/**
+ * @swagger
+ * /job-status/history/{job_id}:
+ *   get:
+ *     tags: [Job Status]
+ *     summary: Get status change history for a job
+ *     description: Returns the full status change history for a job, ordered chronologically. Supports a limit query param to restrict results.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: job_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           example: 10
+ *         description: Maximum number of history entries to return
+ *     responses:
+ *       200:
+ *         description: Status history retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 history:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/job-status/history/:job_id
 // PURPOSE: Get status change history for a job
@@ -118,6 +309,51 @@ router.post('/update', JobStatusController.updateStatus);
  */
 router.get('/history/:job_id', JobStatusController.getStatusHistory);
 
+/**
+ * @swagger
+ * /job-status/allowed-transitions/{job_id}:
+ *   get:
+ *     tags: [Job Status]
+ *     summary: Get allowed status transitions for a job
+ *     description: Returns which status values the job can transition to from its current state, based on the status state machine.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: job_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     responses:
+ *       200:
+ *         description: Allowed transitions retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 transitions:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: [in_progress, cancelled]
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/job-status/allowed-transitions/:job_id
 // PURPOSE: Get allowed status transitions for a job
@@ -129,6 +365,57 @@ router.get('/history/:job_id', JobStatusController.getStatusHistory);
  */
 router.get('/allowed-transitions/:job_id', JobStatusController.getAllowedTransitions);
 
+/**
+ * @swagger
+ * /job-status/validate-transition:
+ *   post:
+ *     tags: [Job Status]
+ *     summary: Validate if a status transition is allowed
+ *     description: Checks whether a job can transition to the specified target status without actually making the change.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [job_id, target_status]
+ *             properties:
+ *               job_id:
+ *                 type: integer
+ *                 example: 5
+ *               target_status:
+ *                 type: string
+ *                 enum: [pending, assigned, in_progress, completed, cancelled]
+ *                 example: in_progress
+ *     responses:
+ *       200:
+ *         description: Validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 valid:
+ *                   type: boolean
+ *                   example: true
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // POST /api/job-status/validate-transition
 // PURPOSE: Validate if a transition is allowed
@@ -140,6 +427,59 @@ router.get('/allowed-transitions/:job_id', JobStatusController.getAllowedTransit
  */
 router.post('/validate-transition', JobStatusController.validateTransition);
 
+/**
+ * @swagger
+ * /job-status/recent-changes:
+ *   get:
+ *     tags: [Job Status]
+ *     summary: Get recent status changes across all jobs
+ *     description: Returns recent status change events across all jobs. Used by the dashboard to display activity feeds.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           example: 20
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, assigned, in_progress, completed, cancelled]
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           example: 7
+ *     responses:
+ *       200:
+ *         description: Recent changes retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 changes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ==========================================
 // GET /api/job-status/recent-changes
 // PURPOSE: Get recent status changes across all jobs

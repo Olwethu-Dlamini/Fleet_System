@@ -26,6 +26,65 @@ const { MAINTENANCE_TYPE, MAINTENANCE_STATUS } = require('../config/constants');
 const requireMaintRead  = [verifyToken, requirePermission('maintenance:read')];
 const requireMaintAdmin = [verifyToken, requirePermission('maintenance:create')];
 
+/**
+ * @swagger
+ * /vehicle-maintenance:
+ *   get:
+ *     tags: [Vehicle Maintenance]
+ *     summary: List maintenance records for a vehicle
+ *     description: Returns all maintenance records for a specified vehicle, ordered by start_date descending. Requires maintenance:read permission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: vehicle_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Vehicle ID
+ *     responses:
+ *       200:
+ *         description: Maintenance records retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 maintenance:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Maintenance'
+ *                 count:
+ *                   type: integer
+ *                   example: 3
+ *       400:
+ *         description: vehicle_id is required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/vehicle-maintenance
 // Query: vehicle_id (required)
@@ -53,6 +112,46 @@ router.get('/', requireMaintRead, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /vehicle-maintenance/active:
+ *   get:
+ *     tags: [Vehicle Maintenance]
+ *     summary: Get vehicles currently in maintenance
+ *     description: Returns vehicles whose maintenance window includes today (status scheduled or in_progress). Used to exclude these vehicles from job assignment.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Active maintenance records
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 maintenance:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Maintenance'
+ *                 count:
+ *                   type: integer
+ *                   example: 1
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/vehicle-maintenance/active
 // Returns vehicles currently in maintenance
@@ -103,6 +202,88 @@ const createMaintenanceValidation = [
     .withMessage('notes must be 2000 characters or less'),
 ];
 
+/**
+ * @swagger
+ * /vehicle-maintenance:
+ *   post:
+ *     tags: [Vehicle Maintenance]
+ *     summary: Create a maintenance record
+ *     description: Schedules a new maintenance window for a vehicle. Checks for overlapping windows before creating. Requires maintenance:create permission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [vehicle_id, maintenance_type, start_date, end_date]
+ *             properties:
+ *               vehicle_id:
+ *                 type: integer
+ *                 example: 2
+ *               maintenance_type:
+ *                 type: string
+ *                 enum: [oil_change, tyre_rotation, brake_service, full_service, other]
+ *                 example: oil_change
+ *               other_type_desc:
+ *                 type: string
+ *                 example: Custom bodywork
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-28'
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-29'
+ *               notes:
+ *                 type: string
+ *                 example: Oil change at 80,000km
+ *     responses:
+ *       201:
+ *         description: Maintenance record created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 maintenance:
+ *                   $ref: '#/components/schemas/Maintenance'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Insufficient permissions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Overlapping maintenance window exists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/', requireMaintAdmin, createMaintenanceValidation, validate, async (req, res) => {
   try {
     const {
@@ -185,6 +366,84 @@ const updateMaintenanceValidation = [
     .isString().trim().isLength({ max: 2000 }),
 ];
 
+/**
+ * @swagger
+ * /vehicle-maintenance/{id}:
+ *   put:
+ *     tags: [Vehicle Maintenance]
+ *     summary: Update a maintenance record
+ *     description: Updates fields on a maintenance record. Date changes re-check for overlapping windows. Requires maintenance:create permission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Maintenance record ID
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [scheduled, in_progress, completed]
+ *               start_date:
+ *                 type: string
+ *                 format: date
+ *               end_date:
+ *                 type: string
+ *                 format: date
+ *               notes:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Maintenance record updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 maintenance:
+ *                   $ref: '#/components/schemas/Maintenance'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Maintenance record not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       409:
+ *         description: Overlapping maintenance window
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.put('/:id', requireMaintAdmin, updateMaintenanceValidation, validate, async (req, res) => {
   try {
     const id = parseInt(req.params.id);
@@ -258,6 +517,48 @@ router.put('/:id', requireMaintAdmin, updateMaintenanceValidation, validate, asy
   }
 });
 
+/**
+ * @swagger
+ * /vehicle-maintenance/{id}:
+ *   delete:
+ *     tags: [Vehicle Maintenance]
+ *     summary: Complete/cancel a maintenance record (soft-delete)
+ *     description: Marks the maintenance record as completed. Records are never hard-deleted to preserve maintenance history. Requires maintenance:create permission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Maintenance record ID
+ *     responses:
+ *       200:
+ *         description: Maintenance record completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Maintenance record not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // DELETE /api/vehicle-maintenance/:id
 // Soft-delete: mark as completed

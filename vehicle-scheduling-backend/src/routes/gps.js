@@ -14,6 +14,88 @@ const logger               = require('../config/logger').child({ service: 'gps-r
 
 const router = express.Router();
 
+/**
+ * @swagger
+ * /gps/directions:
+ *   get:
+ *     tags: [GPS]
+ *     summary: Get directions to a job destination
+ *     description: Returns encoded polyline, ETA, and distance from an optional origin to the job's destination coordinates. Uses Google Routes API v2 server-side (API key never sent to client). If no origin is provided, returns only the destination coordinates.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: job_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID to get directions to
+ *       - in: query
+ *         name: origin_lat
+ *         schema:
+ *           type: number
+ *         description: Origin latitude (driver's current position)
+ *         example: -26.1
+ *       - in: query
+ *         name: origin_lng
+ *         schema:
+ *           type: number
+ *         description: Origin longitude (driver's current position)
+ *         example: 28.0
+ *     responses:
+ *       200:
+ *         description: Directions result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 directions:
+ *                   type: object
+ *                   properties:
+ *                     encoded_polyline:
+ *                       type: string
+ *                       nullable: true
+ *                     duration_text:
+ *                       type: string
+ *                       nullable: true
+ *                       example: 25 mins
+ *                     distance_text:
+ *                       type: string
+ *                       nullable: true
+ *                       example: 18.3 km
+ *                     destination_lat:
+ *                       type: number
+ *                     destination_lng:
+ *                       type: number
+ *       400:
+ *         description: Missing job_id
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found or has no destination coordinates
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Directions fetch failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/gps/directions
 // Returns directions (polyline, ETA, distance) for a job via Google Routes API v2.
@@ -87,6 +169,68 @@ router.get('/directions', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /gps/location:
+ *   post:
+ *     tags: [GPS]
+ *     summary: Post driver location update
+ *     description: Driver/technician posts their current GPS coordinates. Enforces working hours (6AM-8PM) and requires GPS consent. Location is stored in memory for real-time dispatch view.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [lat, lng]
+ *             properties:
+ *               lat:
+ *                 type: number
+ *                 example: -26.2041
+ *               lng:
+ *                 type: number
+ *                 example: 28.0473
+ *               accuracy_m:
+ *                 type: number
+ *                 example: 10.5
+ *     responses:
+ *       200:
+ *         description: Location accepted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Outside working hours or GPS consent not granted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // POST /api/gps/location
 // Driver posts their current location.
@@ -144,6 +288,49 @@ router.post(
   }
 );
 
+/**
+ * @swagger
+ * /gps/drivers:
+ *   get:
+ *     tags: [GPS]
+ *     summary: Get live driver positions (admin/scheduler only)
+ *     description: Returns in-memory GPS positions for all active drivers in the tenant. Stale positions (>5 min) are automatically filtered. Scheduler access can be disabled by the admin via the scheduler_gps_visible setting.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Live driver positions
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/GpsPosition'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Admin or scheduler role required (or scheduler GPS visibility disabled)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/gps/drivers
 // Returns live driver positions for the tenant.
@@ -182,6 +369,41 @@ router.get('/drivers', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /gps/consent:
+ *   get:
+ *     tags: [GPS]
+ *     summary: Get current user's GPS consent record
+ *     description: Returns the GPS consent status for the authenticated user. Used by the Flutter app to determine whether to show the consent screen on startup.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Consent record
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/GpsConsent'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // GET /api/gps/consent
 // Returns the current user's GPS consent record.
@@ -196,6 +418,50 @@ router.get('/consent', verifyToken, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /gps/consent:
+ *   post:
+ *     tags: [GPS]
+ *     summary: Grant GPS consent (first-time)
+ *     description: Creates a GPS consent record for the user (gps_enabled=true). This is the POPIA/GDPR consent audit record. Call this when the user accepts the consent screen.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               gps_enabled:
+ *                 type: boolean
+ *                 example: true
+ *     responses:
+ *       201:
+ *         description: Consent granted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/GpsConsent'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // POST /api/gps/consent
 // First-time consent grant (gps_enabled = true).
@@ -222,6 +488,58 @@ router.post(
   }
 );
 
+/**
+ * @swagger
+ * /gps/consent:
+ *   put:
+ *     tags: [GPS]
+ *     summary: Update GPS consent (enable or disable tracking)
+ *     description: Updates the user's GPS consent. Send gps_enabled=false to stop tracking. The POPIA audit record is still created even when disabling — this matches the decline flow.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [gps_enabled]
+ *             properties:
+ *               gps_enabled:
+ *                 type: boolean
+ *                 example: false
+ *     responses:
+ *       200:
+ *         description: Consent updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   $ref: '#/components/schemas/GpsConsent'
+ *       400:
+ *         description: Validation error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 // ============================================
 // PUT /api/gps/consent
 // Update GPS consent (enable or disable tracking).

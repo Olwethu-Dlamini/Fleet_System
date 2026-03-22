@@ -50,6 +50,84 @@ router.use(verifyToken);
 //   call this whenever date/time changes to grey out already-booked
 //   drivers before the user submits.
 // ──────────────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /availability/drivers:
+ *   get:
+ *     tags: [Availability]
+ *     summary: Get available and busy drivers for a time slot
+ *     description: Returns all active drivers split into available and busy lists for a given date/time window. Used by the Flutter assignment picker to grey out already-booked drivers before submission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date (YYYY-MM-DD)
+ *       - in: query
+ *         name: start_time
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Start time (HH:MM:SS)
+ *         example: '09:00:00'
+ *       - in: query
+ *         name: end_time
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: End time (HH:MM:SS)
+ *         example: '11:00:00'
+ *       - in: query
+ *         name: exclude_job_id
+ *         schema:
+ *           type: integer
+ *         description: Job ID to exclude from conflict check (when editing an existing job)
+ *     responses:
+ *       200:
+ *         description: Driver availability lists
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 available:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 busy:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/User'
+ *                 availableIds:
+ *                   type: array
+ *                   items:
+ *                     type: integer
+ *       400:
+ *         description: Missing required query params
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/drivers', async (req, res) => {
   try {
     const { date, start_time, end_time, exclude_job_id } = req.query;
@@ -94,6 +172,69 @@ router.get('/drivers', async (req, res) => {
 // Flutter usage: CreateJobScreen vehicle picker — wraps the existing
 //   findAvailableVehicles() method already in vehicleAvailabilityService.
 // ──────────────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /availability/vehicles:
+ *   get:
+ *     tags: [Availability]
+ *     summary: Get available vehicles for a time slot
+ *     description: Returns vehicles that are not already assigned to another job in the given date/time window. Used by the Flutter vehicle picker.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Date (YYYY-MM-DD)
+ *       - in: query
+ *         name: start_time
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Start time (HH:MM:SS)
+ *       - in: query
+ *         name: end_time
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: End time (HH:MM:SS)
+ *     responses:
+ *       200:
+ *         description: Available vehicles
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 available:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Vehicle'
+ *       400:
+ *         description: Missing required query params
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/vehicles', async (req, res) => {
   try {
     const { date, start_time, end_time } = req.query;
@@ -141,6 +282,78 @@ router.get('/vehicles', async (req, res) => {
 // Flutter usage: validate a specific driver selection before calling
 //   the assign endpoint — e.g. the "Save" button on edit screens.
 // ──────────────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /availability/check-drivers:
+ *   post:
+ *     tags: [Availability]
+ *     summary: Check availability of specific drivers
+ *     description: Checks whether a specific set of drivers is available for a time slot. Returns allAvailable flag and any conflicts. Used to validate a driver selection before the Save button is pressed.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [technician_ids, date, start_time, end_time]
+ *             properties:
+ *               technician_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [3, 7]
+ *               date:
+ *                 type: string
+ *                 format: date
+ *                 example: '2026-03-25'
+ *               start_time:
+ *                 type: string
+ *                 example: '09:00:00'
+ *               end_time:
+ *                 type: string
+ *                 example: '11:00:00'
+ *               exclude_job_id:
+ *                 type: integer
+ *                 example: 5
+ *     responses:
+ *       200:
+ *         description: Availability check result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 allAvailable:
+ *                   type: boolean
+ *                   example: true
+ *                 conflicts:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       400:
+ *         description: Missing required fields
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/check-drivers', async (req, res) => {
   try {
     const { technician_ids, date, start_time, end_time, exclude_job_id } = req.body;
