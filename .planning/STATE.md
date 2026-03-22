@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 07-01-PLAN.md
-last_updated: "2026-03-22T07:45:44.921Z"
+stopped_at: Completed 07-02-PLAN.md
+last_updated: "2026-03-22T07:53:04.770Z"
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 22
-  completed_plans: 21
+  completed_plans: 22
   percent: 100
 ---
 
@@ -126,6 +126,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-22 | Socket.IO JWT auth in handshake headers — consistent with REST auth pattern, no separate auth flow needed | 07-01 GPS |
 | 2026-03-22 | In-memory Map for GPS cache keyed by driverId, evicts stale >5 min on read, preserves live positions after flush | 07-01 GPS |
 | 2026-03-22 | gps_consent UNIQUE KEY on user_id — ON DUPLICATE KEY UPDATE for idempotent upsert | 07-01 GPS |
+| 2026-03-22 | PolylinePoints.decodePolyline() called statically — v3.x requires apiKey for network methods but decode is static, no key needed | 07-02 GPS |
+| 2026-03-22 | Backend proxies Google Routes API — GOOGLE_MAPS_API_KEY stays server-side, never sent to Flutter client | 07-02 GPS |
+| 2026-03-22 | GpsService uses static methods — matches existing Flutter service pattern (notification_service, user_service) | 07-02 GPS |
 
 ## Performance Metrics
 
@@ -153,11 +156,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 06 P02 | 4 | 2 tasks | 6 files |
 | Phase 06 P03 | 4 | 2 tasks | 3 files |
 | Phase 07 P01 | 8 | 2 tasks | 6 files |
+| Phase 07 P02 | 15 | 2 tasks | 7 files |
 
 ## Session
 
-**Last session:** 2026-03-22T07:45:44.916Z
-**Stopped at:** Completed 07-01-PLAN.md
+**Last session:** 2026-03-22T07:53:04.766Z
+**Stopped at:** Completed 07-02-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*

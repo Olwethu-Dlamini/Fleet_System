@@ -79,7 +79,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### GPS & Maps (GPS)
 
-- [ ] **GPS-01**: Directions + estimated travel time displayed when creating/viewing a job (Google Directions API)
+- [x] **GPS-01**: Directions + estimated travel time displayed when creating/viewing a job (Google Directions API)
 - [x] **GPS-02**: Live driver tracking — drivers POST location every 15-30 seconds via HTTP
 - [x] **GPS-03**: Real-time driver positions on map for admin/scheduler (Socket.IO broadcast)
 - [x] **GPS-04**: Admin toggle to control scheduler GPS visibility
