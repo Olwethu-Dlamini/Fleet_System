@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-changeme}
+      MYSQL_DATABASE: ${DB_NAME:-vehicle_scheduling}
+      MYSQL_USER: ${DB_USER:-fleetuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-fleetpass}
+    ports:
+      - "${DB_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./vehicle_scheduling.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./vehicle-scheduling-backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-fleetuser}
+      DB_PASSWORD: ${DB_PASSWORD:-fleetpass}
+      DB_NAME: ${DB_NAME:-vehicle_scheduling}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES: ${JWT_EXPIRES:-8h}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      FCM_SERVICE_ACCOUNT_PATH: ${FCM_SERVICE_ACCOUNT_PATH:-}
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
+    ports:
+      - "${API_PORT:-3000}:3000"
+    volumes:
+      # Mount FCM service account JSON if path is set
+      - ${FCM_SERVICE_ACCOUNT_PATH:-/dev/null}:${FCM_SERVICE_ACCOUNT_PATH:-/dev/null}:ro
+
+volumes:
+  mysql_data:
