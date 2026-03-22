@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 08-01-PLAN.md
-last_updated: "2026-03-22T09:31:30.544Z"
+stopped_at: Completed 08-03-PLAN.md
+last_updated: "2026-03-22T09:48:18.843Z"
 progress:
   total_phases: 9
   completed_phases: 7
   total_plans: 27
-  completed_plans: 25
+  completed_plans: 26
   percent: 100
 ---
 
@@ -138,6 +138,8 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-22 | JWT_SECRET set at line 1 of every test file before any require — server.js process.exit(1) guard fires before module load | 08-01 TEST |
 | 2026-03-22 | Jest 30.x renamed --testPathPattern to --testPathPatterns (plural) — breaking change from Jest 29.x | 08-01 TEST |
 | 2026-03-22 | vehicles.js createVehicleValidation used body('name') but handler reads vehicle_name — bug fixed in route validator | 08-01 TEST |
+| 2026-03-22 | apiRequestContext pattern used instead of browser UI — Flutter renders to canvas, DOM selectors won't work | 08-03 E2E |
+| 2026-03-22 | Acceptable status codes include 400/404 for routes where test DB may lack seeded data — proves route and auth wiring | 08-03 E2E |
 
 ## Performance Metrics
 
@@ -169,11 +171,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 07 P03 | 21 | 2 tasks | 4 files |
 | Phase 07 P04 | 4 | 2 tasks | 3 files |
 | Phase 08 P01 | 5 | 2 tasks | 18 files |
+| Phase 08 P03 | 14 | 2 tasks | 7 files |
 
 ## Session
 
-**Last session:** 2026-03-22T09:31:30.539Z
-**Stopped at:** Completed 08-01-PLAN.md
+**Last session:** 2026-03-22T09:48:18.839Z
+**Stopped at:** Completed 08-03-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
