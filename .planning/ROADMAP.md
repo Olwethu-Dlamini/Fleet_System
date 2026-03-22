@@ -272,7 +272,12 @@ Plans:
 - [ ] System handles 20+ concurrent users without errors
 - [ ] All tests pass in CI
 
-**Estimated plans:** 3
+**Plans:** 3 plans
+
+Plans:
+- [ ] 08-01-PLAN.md — API endpoint tests: Jest + Supertest for all 15 backend routes with mocked DB (TEST-01)
+- [ ] 08-02-PLAN.md — Regression suite (permission matrix, conflict detection, timezone) + Artillery load test config (TEST-03, TEST-04, TEST-05)
+- [ ] 08-03-PLAN.md — Playwright E2E: dispatcher, driver, scheduler API journey tests (TEST-02)
 
 ---
 
