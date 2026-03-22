@@ -80,13 +80,13 @@ Requirements for initial release. Each maps to roadmap phases.
 ### GPS & Maps (GPS)
 
 - [ ] **GPS-01**: Directions + estimated travel time displayed when creating/viewing a job (Google Directions API)
-- [ ] **GPS-02**: Live driver tracking — drivers POST location every 15-30 seconds via HTTP
-- [ ] **GPS-03**: Real-time driver positions on map for admin/scheduler (Socket.IO broadcast)
-- [ ] **GPS-04**: Admin toggle to control scheduler GPS visibility
+- [x] **GPS-02**: Live driver tracking — drivers POST location every 15-30 seconds via HTTP
+- [x] **GPS-03**: Real-time driver positions on map for admin/scheduler (Socket.IO broadcast)
+- [x] **GPS-04**: Admin toggle to control scheduler GPS visibility
 - [ ] **GPS-05**: Location snapshot on job completion (audit trail)
-- [ ] **GPS-06**: GPS consent screen on driver app (POPIA/GDPR compliance)
-- [ ] **GPS-07**: Time-bounded tracking — only during working hours / active jobs
-- [ ] **GPS-08**: Two-tier GPS storage — in-memory/Redis for live, periodic MySQL flush for history
+- [x] **GPS-06**: GPS consent screen on driver app (POPIA/GDPR compliance)
+- [x] **GPS-07**: Time-bounded tracking — only during working hours / active jobs
+- [x] **GPS-08**: Two-tier GPS storage — in-memory/Redis for live, periodic MySQL flush for history
 
 ### User Management (USR)
 

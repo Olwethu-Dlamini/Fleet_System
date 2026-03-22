@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_plan: 1
 status: executing
-stopped_at: Completed 06-03-PLAN.md
-last_updated: "2026-03-21T18:31:13.607Z"
+stopped_at: Completed 07-01-PLAN.md
+last_updated: "2026-03-22T07:45:44.921Z"
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 20
-  completed_plans: 20
+  total_plans: 22
+  completed_plans: 21
   percent: 100
 ---
 
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Schedulers can efficiently assign, monitor, and adjust jobs in real-time so no job falls through the cracks
-**Current focus:** Phase 06 — time-management
+**Current focus:** Phase 07 — gps-maps-live-tracking
 
 ## Milestone: v1.0
 
-**Status:** Executing Phase 06
+**Status:** Executing Phase 07
 **Phases:** 9 total
 **Requirements:** 62 v1 requirements mapped across all phases
 
 ## Current Phase
 
-**Phase:** 6
+**Phase:** 7
 **Status:** Complete (02-01, 02-02, 02-03 all complete)
 **Current Plan:** 1
 **Requirements:** USR-01 to SCHED-04
@@ -123,6 +123,9 @@ Progress: [██████████] 100% (Phase 1)
 | 2026-03-21 | TimeExtensionProvider.clearState() public — future scheduler approval screen can reset between jobs | 06-02 TIME |
 | 2026-03-21 | GlobalKey<NavigatorState> on FcmService.navigatorKey wired to MaterialApp — enables FCM to push routes without BuildContext (cold-start + background tap) | 06-03 TIME |
 | 2026-03-21 | time_extension_approved/denied navigates popUntil(root) — JobDetailScreen requires a full Job object, navigating to jobs list is safer than partial navigation | 06-03 TIME |
+| 2026-03-22 | Socket.IO JWT auth in handshake headers — consistent with REST auth pattern, no separate auth flow needed | 07-01 GPS |
+| 2026-03-22 | In-memory Map for GPS cache keyed by driverId, evicts stale >5 min on read, preserves live positions after flush | 07-01 GPS |
+| 2026-03-22 | gps_consent UNIQUE KEY on user_id — ON DUPLICATE KEY UPDATE for idempotent upsert | 07-01 GPS |
 
 ## Performance Metrics
 
@@ -149,11 +152,12 @@ Progress: [██████████] 100% (Phase 1)
 | Phase 06 P01 | 4 | 2 tasks | 4 files |
 | Phase 06 P02 | 4 | 2 tasks | 6 files |
 | Phase 06 P03 | 4 | 2 tasks | 3 files |
+| Phase 07 P01 | 8 | 2 tasks | 6 files |
 
 ## Session
 
-**Last session:** 2026-03-21T18:31:13.603Z
-**Stopped at:** Completed 06-03-PLAN.md
+**Last session:** 2026-03-22T07:45:44.916Z
+**Stopped at:** Completed 07-01-PLAN.md
 
 ---
 *Last updated: 2026-03-21 after 01-01 execution*
