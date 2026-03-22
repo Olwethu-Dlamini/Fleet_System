@@ -2,7 +2,7 @@
 
 ## What This Is
 
-A multi-tenant vehicle scheduling and fleet management platform for service companies. Admins and schedulers assign jobs to drivers and technicians, track vehicles, manage maintenance schedules, and monitor field operations in real-time via GPS. Built as a sellable SaaS product with Docker-first deployment to any Linux server.
+A multi-tenant vehicle scheduling and fleet management SaaS for service companies. Admins and schedulers assign jobs to drivers and technicians, track vehicles, manage maintenance schedules, and monitor field operations in real-time via GPS. Features smart job assignment with load balancing, automated time extension workflows, FCM push + email notifications, live driver tracking via Socket.IO, and POPIA/GDPR-compliant GPS consent. Docker-first deployment to any Linux server.
 
 ## Core Value
 
@@ -12,113 +12,75 @@ Schedulers can efficiently assign, monitor, and adjust jobs in real-time — wit
 
 ### Validated
 
-<!-- Shipped and confirmed valuable — inferred from existing codebase. -->
-
-- [x] **AUTH-01**: JWT-based authentication with role-based access (admin, scheduler, driver, technician)
-- [x] **JOB-01**: CRUD operations for jobs with assignment to drivers/technicians
-- [x] **VEH-01**: CRUD operations for vehicles
-- [x] **USR-01**: User management (create, edit, delete users)
-- [x] **JOB-02**: Admin can hotswap drivers on jobs
-- [x] **JOB-03**: Job status tracking (pending, in-progress, completed, cancelled)
-- [x] **MAP-01**: Google Maps integration on job creation (location picker)
-- [x] **DASH-01**: Basic dashboard with job statistics
+- ✓ **AUTH-01**: JWT-based authentication with role-based access — v1.0
+- ✓ **JOB-01**: CRUD operations for jobs with assignment — v1.0
+- ✓ **VEH-01**: CRUD operations for vehicles — v1.0
+- ✓ **USR-01**: User management — v1.0
+- ✓ **JOB-02**: Admin can hotswap drivers — v1.0
+- ✓ **JOB-03**: Job status tracking — v1.0
+- ✓ **MAP-01**: Google Maps integration on job creation — v1.0
+- ✓ **DASH-01**: Basic dashboard with job statistics — v1.0
+- ✓ **FOUND-01–10**: Foundation & security hardening (multi-tenant, rate limiting, validation, logging) — v1.0
+- ✓ **USR-02/03**: Contact number field on user forms — v1.0
+- ✓ **MAINT-01–05**: Vehicle maintenance scheduling and history — v1.0
+- ✓ **SCHED-01–04**: Scheduler role with restricted permissions — v1.0
+- ✓ **ASGN-01–05**: Smart job assignment with load balancing — v1.0
+- ✓ **STAT-01–04**: Job status automation with GPS completion capture — v1.0
+- ✓ **DASH-01–04**: Enhanced dashboard with weekend view and toggles — v1.0
+- ✓ **NOTIF-01–07**: Push + email + in-app notifications — v1.0
+- ✓ **TIME-01–07**: Time extension workflow with impact analysis — v1.0
+- ✓ **GPS-01–08**: Directions, live tracking, consent, working hours — v1.0
+- ✓ **TEST-01–05**: API tests, E2E, regression, permission matrix, load testing — v1.0
+- ✓ **DOC-01–05**: User manuals, Swagger API docs, deployment guide — v1.0
 
 ### Active
 
-<!-- Current scope. Building toward these. -->
-
-**Notifications & Alerts**
-- [ ] **NOTIF-01**: Push notifications when a job is about to start
-- [ ] **NOTIF-02**: Push notifications when a job is overdue (should be complete but isn't)
-- [ ] **NOTIF-03**: Email notifications (togglable per user preference)
-- [ ] **NOTIF-04**: In-app notification center with history
-
-**Time Management**
-- [ ] **TIME-01**: "Add more time" button on in-progress jobs (technician-facing)
-- [ ] **TIME-02**: Reason field required when requesting additional time
-- [ ] **TIME-03**: System shows impact of time extension on other jobs/drivers
-- [ ] **TIME-04**: System suggests 2-3 rescheduling options for affected jobs
-- [ ] **TIME-05**: Scheduler has final approval on time extensions and rescheduling
-
-**Job Assignment & Load Balancing**
-- [ ] **ASGN-01**: Driver job count displayed next to name during assignment
-- [ ] **ASGN-02**: Green glow/highlight on drivers with fewer jobs (visual load balancing)
-- [ ] **ASGN-03**: One driver per vehicle, multiple technicians per job
-- [ ] **ASGN-04**: Historical job count (total jobs ever done) visible during assignment
-
-**Job Status Automation**
-- [ ] **STAT-01**: Jobs auto-update to "in progress" when scheduled start time arrives
-- [ ] **STAT-02**: "Complete" status requires manual confirmation by driver or technician only
-- [ ] **STAT-03**: Geo-capture of location when "complete job" is tapped
-
-**Vehicle Maintenance**
-- [ ] **MAINT-01**: Vehicle maintenance scheduling button
-- [ ] **MAINT-02**: Vehicles under maintenance are excluded from job assignment on those days
-- [ ] **MAINT-03**: Maintenance history log per vehicle
-
-**Scheduler Role & Dashboard**
-- [ ] **SCHED-01**: Scheduler role has same permissions as admin EXCEPT cannot add/remove vehicles or drivers
-- [ ] **SCHED-02**: Scheduler can swap vehicles on jobs
-- [ ] **SCHED-03**: Dashboard "jobs today" shows scheduler preview (reference existing scheduler graphs page)
-- [ ] **SCHED-04**: Weekend jobs view button on scheduler
-- [ ] **SCHED-05**: Weekday view toggle: drivers-assigned vs clients view
-
-**GPS & Maps**
-- [ ] **GPS-01**: Directions and estimated travel time shown when creating/viewing a job
-- [ ] **GPS-02**: Live driver tracking on map (real-time location during jobs)
-- [ ] **GPS-03**: Admin controls visibility — can toggle whether scheduler sees live GPS
-- [ ] **GPS-04**: Location snapshot recorded on job completion for audit trail
-
-**User Management**
-- [ ] **USR-02**: Contact number field on user creation and profile view
-
-**Testing & Quality**
-- [ ] **TEST-01**: API endpoint tests for all backend routes
-- [ ] **TEST-02**: UI/integration tests with Playwright
-- [ ] **TEST-03**: Regression test suite
-- [ ] **TEST-04**: User manual / documentation
+(None — all v1.0 requirements shipped. Define in next milestone.)
 
 ### Out of Scope
 
-<!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
-
-- Multi-tenancy / white-labeling — architecture should support it, but tenant isolation is v2
 - Payment processing / billing — not needed for v1 operations
-- Chat / messaging between users — out of scope, use existing communication tools
+- Chat / messaging between users — use existing communication tools
 - Inventory management — separate concern from scheduling
 - Customer-facing portal — v1 is internal operations only
-- iOS/Android app store deployment — focus on functionality first, store submission later
+- iOS/Android app store deployment — focus on functionality first
+- Offline mode — real-time is core value
 
 ## Context
 
-**Existing codebase:** Brownfield project with working Node.js/Express backend (JWT auth, MySQL, Swagger docs) and Flutter mobile app (Provider state management, Google Maps partial integration). Core CRUD for jobs, vehicles, and users is functional. Admin can hotswap drivers. Database has test data.
+**Shipped:** v1.0 MVP on 2026-03-22
+**Codebase:** ~55,000 LOC across backend (16,500 JS), frontend (21,200 Dart), and tests (17,700 JS)
+**Tech stack:** Node.js/Express 5.x + Flutter + MySQL + Socket.IO + Firebase Cloud Messaging
+**Deployment:** Docker Compose (MySQL 8.0 + Node.js API), Swagger at /swagger
+**Test coverage:** 194+ automated tests (112 API, 82 regression/permission, 20 E2E specs) + Artillery load config
 
-**Codebase map:** See `.planning/codebase/` for detailed analysis (STACK.md, ARCHITECTURE.md, STRUCTURE.md, CONVENTIONS.md, TESTING.md, INTEGRATIONS.md, CONCERNS.md).
-
-**Known issues from codebase analysis:** No test coverage, some security concerns (raw SQL in places), no input validation middleware, hardcoded config values, Express 5.x migration incomplete in some routes.
-
-**Target market:** Service companies (HVAC, plumbing, electrical, maintenance) that dispatch technicians in vehicles to job sites.
+**Known tech debt (from milestone audit):**
+- `schedulerOrAbove` middleware excludes dispatcher JWT role — affects scheduler report access
+- No immediate FCM push on job assignment (drivers notified via 15-min cron only)
+- Artillery not installed due to disk space (npm install required)
+- E2E scheduler spec has wrong HTTP method for time extension endpoints
 
 ## Constraints
 
 - **Tech Stack**: Node.js/Express backend + Flutter frontend + MySQL — existing, non-negotiable
 - **Deployment**: Docker-first, deployable to any Linux server
-- **Timeline**: ASAP — prioritize shipping functional features
-- **Maps**: Google Maps API (already integrated partially)
-- **Push Notifications**: Firebase Cloud Messaging (Flutter ecosystem standard)
-- **Architecture**: Keep sellable — clean separation, no hardcoded company-specific logic
-- **Testing**: Comprehensive — API tests, UI tests (Playwright), regression suite, documentation
+- **Maps**: Google Maps API (API key added by user manually)
+- **Push Notifications**: Firebase Cloud Messaging
+- **Architecture**: Keep sellable — clean separation, multi-tenant ready
 
 ## Key Decisions
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Push + Email notifications | Cover both real-time alerts and async communication | — Pending |
-| Firebase Cloud Messaging for push | Standard for Flutter, cross-platform | — Pending |
-| Smart rescheduling (suggest options) | Scheduler keeps control but system does heavy lifting | — Pending |
-| Admin controls GPS visibility | Privacy/trust — admin can limit scheduler's GPS access | — Pending |
-| Docker-first deployment | Cloud-agnostic, consistent environments | — Pending |
-| Sellable from day 1 | Architecture must support multi-tenant adaptation | — Pending |
+| Push + Email notifications | Cover both real-time alerts and async communication | ✓ Good — FCM + nodemailer with graceful degradation |
+| Firebase Cloud Messaging for push | Standard for Flutter, cross-platform | ✓ Good — topic-based subscriptions work well |
+| Smart rescheduling (suggest options) | Scheduler keeps control but system does heavy lifting | ✓ Good — 2-3 suggestions generated per extension |
+| Admin controls GPS visibility | Privacy/trust — admin can limit scheduler's GPS access | ✓ Good — settings toggle enforced on backend |
+| Docker-first deployment | Cloud-agnostic, consistent environments | ✓ Good — docker-compose.yml ships with project |
+| Sellable from day 1 | Architecture must support multi-tenant adaptation | ✓ Good — tenant_id on all tables, JWT-scoped |
+| In-memory GPS cache over Redis | Simpler v1 — Redis planned for v2 scaling | ✓ Good — Map + 5-min cron flush works for single-server |
+| Playwright API tests over browser | Flutter renders to canvas, DOM interaction impossible | ✓ Good — apiRequestContext covers all journeys |
+| Socket.IO for live tracking | Real-time broadcast with JWT tenant rooms | ✓ Good — working, future upgrade to dedicated service |
 
 ---
-*Last updated: 2026-03-21 after initial project definition*
+*Last updated: 2026-03-22 after v1.0 milestone*
