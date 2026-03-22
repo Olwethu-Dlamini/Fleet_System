@@ -98,9 +98,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **TEST-01**: API endpoint tests for all backend routes (Jest + Supertest)
 - [x] **TEST-02**: UI/E2E tests with Playwright (dispatcher and driver journeys)
-- [ ] **TEST-03**: Regression test suite (conflict detection, timezone, permissions)
-- [ ] **TEST-04**: Permission matrix regression tests (role-based access verification)
-- [ ] **TEST-05**: Load testing with 20+ concurrent users
+- [x] **TEST-03**: Regression test suite (conflict detection, timezone, permissions)
+- [x] **TEST-04**: Permission matrix regression tests (role-based access verification)
+- [x] **TEST-05**: Load testing with 20+ concurrent users
 
 ### Documentation (DOC)
 
