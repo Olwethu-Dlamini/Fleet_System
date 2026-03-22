@@ -17,6 +17,9 @@ const jwt      = require('jsonwebtoken');
 const helmet   = require('helmet');
 const pinoHttp = require('pino-http');
 const logger   = require('./config/logger');
+const { createServer } = require('node:http');
+const { Server } = require('socket.io');
+const GpsService = require('./services/gpsService');
 
 const db         = require('./config/database');
 const routes     = require('./routes');
@@ -26,6 +29,13 @@ const { USER_ROLE, PERMISSIONS } = require('./config/constants');
 const { apiLimiter, loginLimiter } = require('./middleware/rateLimiter');
 
 const app  = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin : '*',   // match existing CORS policy
+    methods: ['GET', 'POST'],
+  },
+});
 const PORT = process.env.PORT || 3000;
 
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -255,6 +265,36 @@ app.use((err, req, res, next) => {
   });
 });
 
+// GPS-03: Socket.IO connection handler for real-time tracking
+io.on('connection', (socket) => {
+  const token = socket.handshake.headers.authorization?.replace('Bearer ', '');
+  if (!token) { socket.disconnect(); return; }
+
+  try {
+    const user = jwt.verify(token, JWT_SECRET);
+    socket.userId   = user.id;
+    socket.tenantId = user.tenant_id;
+    socket.role     = user.role;
+  } catch {
+    socket.disconnect();
+    return;
+  }
+
+  socket.on('join_tracking', () => {
+    // Only admin/scheduler can view live tracking
+    if (['admin', 'scheduler'].includes(socket.role)) {
+      socket.join(`tracking:${socket.tenantId}`);
+      logger.info({ userId: socket.userId, tenantId: socket.tenantId }, 'Joined tracking room');
+    }
+  });
+
+  socket.on('disconnect', () => {
+    logger.debug({ userId: socket.userId }, 'Socket disconnected');
+  });
+});
+
+GpsService.init(io);
+
 // ======================
 // START SERVER
 // ======================
@@ -299,10 +339,43 @@ if (require.main === module) {
       `);
       logger.info('Notification tables ensured');
 
+      // ============================================
+      // DB MIGRATION: GPS tables (Phase 7)
+      // Idempotent — safe to run on every startup
+      // ============================================
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS gps_consent (
+          id           INT UNSIGNED NOT NULL AUTO_INCREMENT,
+          tenant_id    INT UNSIGNED NOT NULL,
+          user_id      INT UNSIGNED NOT NULL,
+          gps_enabled  BOOLEAN NOT NULL DEFAULT TRUE,
+          consented_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          UNIQUE KEY uk_gps_consent_user (user_id),
+          KEY idx_gps_consent_tenant_user (tenant_id, user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS driver_location_history (
+          id          INT UNSIGNED NOT NULL AUTO_INCREMENT,
+          tenant_id   INT UNSIGNED NOT NULL,
+          driver_id   INT UNSIGNED NOT NULL,
+          lat         DOUBLE NOT NULL,
+          lng         DOUBLE NOT NULL,
+          accuracy_m  FLOAT DEFAULT NULL,
+          recorded_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (id),
+          KEY idx_dlh_tenant_driver (tenant_id, driver_id),
+          KEY idx_dlh_recorded_at (recorded_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `);
+      logger.info('GPS tables ensured');
+
       const { startCronJobs } = require('./services/cronService');
       startCronJobs();
 
-      app.listen(PORT, () => {
+      httpServer.listen(PORT, () => {
         logger.info({ port: PORT }, `FleetScheduler API listening on port ${PORT}`);
       });
     } catch (err) {
