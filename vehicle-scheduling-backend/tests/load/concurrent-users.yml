@@ -1,0 +1,124 @@
+# ============================================
+# FILE: tests/load/concurrent-users.yml
+# PURPOSE: Artillery load test simulating 20+ concurrent users
+#          across realistic FleetScheduler usage patterns.
+#
+# TEST-05: Load testing — 20+ concurrent users
+#
+# PREREQUISITES:
+#   1. Backend server running on localhost:3000
+#   2. Database seeded with test data
+#   3. TEST_ADMIN_TOKEN env var set:
+#        export TEST_ADMIN_TOKEN=$(node tests/load/generate-token.js)
+#
+# RUN:
+#   npm run test:load
+#   -- or --
+#   artillery run tests/load/concurrent-users.yml
+#
+# NOTE: This test requires a LIVE server with a seeded database.
+#       It is NOT part of the automated CI suite (jest).
+# ============================================
+
+config:
+  target: "http://localhost:3000"
+  phases:
+    # Warm-up: ramp up gradually to detect initial issues
+    - name: "Warm-up"
+      duration: 10
+      arrivalRate: 5
+      rampTo: 10
+
+    # Peak load: 20 new virtual users per second = well over 20 concurrent
+    - name: "Peak load"
+      duration: 60
+      arrivalRate: 20
+
+  # Default HTTP settings
+  http:
+    timeout: 10
+
+  # Ensure p95 response time is under 2000ms
+  ensure:
+    p95: 2000
+
+  # Environment variables passed to scenarios
+  environments:
+    load:
+      target: "http://localhost:3000"
+
+scenarios:
+  # ── Scenario A: Dispatcher reads dashboard (most common pattern) ──────────
+  - name: "Dispatcher reads dashboard"
+    weight: 40
+    flow:
+      - get:
+          url: "/api/dashboard/summary"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/api/jobs"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/api/dashboard/stats"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+          expect:
+            - statusCode: 200
+
+  # ── Scenario B: Driver checks assigned jobs ────────────────────────────────
+  - name: "Driver checks assigned jobs"
+    weight: 30
+    flow:
+      - get:
+          url: "/api/jobs"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+          expect:
+            - statusCode: 200
+
+      - get:
+          url: "/api/notifications"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+
+  # ── Scenario C: GPS location update (driver polling) ─────────────────────
+  - name: "GPS location update"
+    weight: 20
+    flow:
+      - post:
+          url: "/api/gps/location"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+            Content-Type: "application/json"
+          json:
+            lat: -33.9249
+            lng: 18.4241
+            job_id: 1
+            accuracy: 10.5
+
+  # ── Scenario D: Create a job (low volume, high cost) ─────────────────────
+  - name: "Create job"
+    weight: 10
+    flow:
+      - post:
+          url: "/api/jobs"
+          headers:
+            Authorization: "Bearer {{ $processEnvironment.TEST_ADMIN_TOKEN }}"
+            Content-Type: "application/json"
+          json:
+            job_type: "installation"
+            customer_name: "Load Test Customer"
+            customer_address: "1 Test Street, Cape Town"
+            scheduled_date: "2027-01-15"
+            scheduled_time_start: "09:00"
+            scheduled_time_end: "12:00"
+            estimated_duration_minutes: 180
+            priority: "normal"
