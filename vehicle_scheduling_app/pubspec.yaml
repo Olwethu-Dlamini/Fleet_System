@@ -47,6 +47,7 @@ dependencies:
   firebase_core: ^3.13.0       # Firebase core initialization
   firebase_messaging: ^15.2.5  # FCM push notifications
   flutter_local_notifications: ^18.0.1  # Show foreground notifications on Android
+  flutter_polyline_points: ^3.1.0  # Decode Google encoded polyline for map route rendering
 
 dev_dependencies:
   flutter_test:

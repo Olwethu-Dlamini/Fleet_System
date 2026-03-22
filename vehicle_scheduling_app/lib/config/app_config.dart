@@ -139,6 +139,28 @@ class AppConfig {
   // PATCH /api/time-extensions/:id/deny
   static const String timeExtensionsEndpoint = '/time-extensions';
 
+  // GPS
+  // GET  /api/gps/directions?job_id=X&origin_lat=Y&origin_lng=Z
+  // POST /api/gps/location
+  // GET  /api/gps/consent
+  // POST /api/gps/consent
+  // PUT  /api/gps/consent
+  // GET  /api/gps/drivers
+  static const String gpsEndpoint = '/gps';
+  static String get gpsDirectionsEndpoint => '$gpsEndpoint/directions';
+  static String get gpsLocationEndpoint    => '$gpsEndpoint/location';
+  static String get gpsConsentEndpoint     => '$gpsEndpoint/consent';
+  static String get gpsDriversEndpoint     => '$gpsEndpoint/drivers';
+
+  // WebSocket URL (Socket.IO) — matches backend listening port
+  static String get wsUrl {
+    if (useLocal) {
+      if (kIsWeb) return 'http://localhost:3000';
+      return 'http://10.0.2.2:3000';
+    }
+    return 'http://3.231.191.15:8080';
+  }
+
   // ==========================================
   // NETWORK CONFIG
   // ==========================================

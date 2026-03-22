@@ -42,6 +42,7 @@ import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/edit_job_screen.dart';
 import 'package:vehicle_scheduling_app/screens/time_management/time_extension_request_screen.dart';
 import 'package:vehicle_scheduling_app/services/user_service.dart';
+import 'package:vehicle_scheduling_app/widgets/job_map_widget.dart';
 
 class _DriverOption {
   final int id;
@@ -1406,6 +1407,24 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   Text(
                     _job.description!,
                     style: const TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // ── ROUTE MAP (GPS-01) ─────────────────────────────────────
+            // Shows embedded Google Map with polyline route, ETA, and distance.
+            // Only rendered when the job has destination coordinates.
+            if (_job.destinationLat != null && _job.destinationLng != null) ...[
+              _buildCard(
+                title: 'Route',
+                icon: Icons.map_outlined,
+                children: [
+                  JobMapWidget(
+                    jobId: _job.id,
+                    destinationLat: _job.destinationLat,
+                    destinationLng: _job.destinationLng,
                   ),
                 ],
               ),
