@@ -19,9 +19,9 @@ const requireAdmin = [verifyToken, adminOnly];
 // Validation schemas — FOUND-06
 // ============================================
 const createVehicleValidation = [
-  body('name')
+  body('vehicle_name')
     .isString().trim().isLength({ min: 2, max: 100 })
-    .withMessage('name must be 2-100 characters'),
+    .withMessage('vehicle_name must be 2-100 characters'),
   body('license_plate')
     .isString().trim().notEmpty()
     .withMessage('license_plate is required'),
@@ -34,9 +34,9 @@ const createVehicleValidation = [
 ];
 
 const updateVehicleValidation = [
-  body('name')
+  body('vehicle_name')
     .optional().isString().trim().isLength({ min: 2, max: 100 })
-    .withMessage('name must be 2-100 characters'),
+    .withMessage('vehicle_name must be 2-100 characters'),
   body('license_plate')
     .optional().isString().trim().notEmpty()
     .withMessage('license_plate cannot be empty'),

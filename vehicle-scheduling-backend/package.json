@@ -6,8 +6,11 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "test": "jest",
-    "test:unit": "jest --testPathPattern=tests/unit",
-    "test:integration": "jest --testPathPattern=tests/integration",
+    "test:unit": "jest --testPathPatterns=tests/unit",
+    "test:integration": "jest --testPathPatterns=tests/integration",
+    "test:api": "jest --testPathPatterns=tests/api --forceExit",
+    "test:regression": "jest --testPathPatterns=tests/regression --forceExit",
+    "test:all": "jest --forceExit",
     "test:coverage": "jest --coverage"
   },
   "keywords": [],
