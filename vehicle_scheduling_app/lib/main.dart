@@ -27,6 +27,7 @@ import 'package:vehicle_scheduling_app/screens/vehicles/vehicles_list_screen.dar
 import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
 import 'package:vehicle_scheduling_app/screens/reports/reports_screen.dart'; // ← NEW
 import 'package:vehicle_scheduling_app/screens/settings/admin_settings_screen.dart';
+import 'package:vehicle_scheduling_app/screens/gps/live_tracking_screen.dart';
 import 'package:vehicle_scheduling_app/services/fcm_service.dart';
 
 void main() async {
@@ -150,8 +151,8 @@ class _AuthGateState extends State<AuthGate> {
 //
 // Tab layout per role:
 //
-//   admin      → Dashboard | Jobs | Vehicles | Schedule | Users | Reports | Settings
-//   scheduler  → Dashboard | Jobs | Vehicles | Schedule
+//   admin      → Dashboard | Jobs | Vehicles | Schedule | Tracking | Users | Reports | Settings
+//   scheduler  → Dashboard | Jobs | Vehicles | Schedule | Tracking
 //   technician → Dashboard | My Jobs
 // ============================================
 class MainApp extends StatefulWidget {
@@ -201,10 +202,11 @@ class _MainAppState extends State<MainApp> {
         const JobsListScreen(), // 1
         const VehiclesListScreen(), // 2
         const SchedulerScreen(), // 3
-        const UsersScreen(), // 4
-        const ReportsScreen(), // 5
+        const LiveTrackingScreen(), // 4
+        const UsersScreen(), // 5
+        const ReportsScreen(), // 6
         if (auth.hasPermission('settings:read'))
-          const AdminSettingsScreen(), // 6
+          const AdminSettingsScreen(), // 7
       ];
     }
 
@@ -214,6 +216,7 @@ class _MainAppState extends State<MainApp> {
       const JobsListScreen(),
       const VehiclesListScreen(),
       const SchedulerScreen(),
+      const LiveTrackingScreen(), // 4
     ];
   }
 
@@ -237,33 +240,38 @@ class _MainAppState extends State<MainApp> {
     }
 
     if (auth.isAdmin) {
-      return const [
-        BottomNavigationBarItem(
+      return [
+        const BottomNavigationBarItem(
           icon: Icon(Icons.dashboard_outlined),
           activeIcon: Icon(Icons.dashboard),
           label: 'Dashboard',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
           icon: Icon(Icons.work_outline),
           activeIcon: Icon(Icons.work),
           label: 'Jobs',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
           icon: Icon(Icons.local_shipping_outlined),
           activeIcon: Icon(Icons.local_shipping),
           label: 'Vehicles',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
           icon: Icon(Icons.calendar_today_outlined),
           activeIcon: Icon(Icons.calendar_today),
           label: 'Schedule',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
+          icon: Icon(Icons.map_outlined),
+          activeIcon: Icon(Icons.map),
+          label: 'Tracking',
+        ),
+        const BottomNavigationBarItem(
           icon: Icon(Icons.people_outline),
           activeIcon: Icon(Icons.people),
           label: 'Users',
         ),
-        BottomNavigationBarItem(
+        const BottomNavigationBarItem(
           icon: Icon(Icons.bar_chart_outlined),
           activeIcon: Icon(Icons.bar_chart),
           label: 'Reports',
@@ -299,6 +307,11 @@ class _MainAppState extends State<MainApp> {
         activeIcon: Icon(Icons.calendar_today),
         label: 'Schedule',
       ),
+      BottomNavigationBarItem(
+        icon: Icon(Icons.map_outlined),
+        activeIcon: Icon(Icons.map),
+        label: 'Tracking',
+      ),
     ];
   }
 
@@ -306,8 +319,9 @@ class _MainAppState extends State<MainApp> {
   // FAB
   // Jobs tab (index 1) for admin/scheduler → New Job
   // Schedule tab (index 3)                 → SchedulerScreen owns its own FAB
-  // Users tab (index 4, admin)             → no FAB here; UsersScreen has its own
-  // Reports tab (index 5, admin)           → no FAB
+  // Tracking tab (index 4)                 → no FAB (map screen)
+  // Users tab (index 5, admin)             → no FAB here; UsersScreen has its own
+  // Reports tab (index 6, admin)           → no FAB
   // Technician                             → no FAB
   // ==========================================
   Widget? _buildFab(AuthProvider auth, int currentIndex) {
