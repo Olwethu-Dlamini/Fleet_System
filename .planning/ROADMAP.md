@@ -16,7 +16,7 @@
 | 6 | Time Management | 3/3 | Complete   | 2026-03-21 |
 | 7 | GPS, Maps & Live Tracking | 4/4 | Complete   | 2026-03-22 |
 | 8 | Testing Suite | 3/3 | Complete   | 2026-03-22 |
-| 9 | Documentation & Deployment | DOC-01–05 | LOW | Phase 8 (tests passing) |
+| 9 | Documentation & Deployment | 1/2 | In Progress|  |
 
 ## Phase Details
 
@@ -301,10 +301,10 @@ Plans:
 - [ ] New deployment can be stood up following the guide alone
 - [ ] Documentation reviewed for accuracy
 
-**Plans:** 2 plans
+**Plans:** 1/2 plans executed
 
 Plans:
-- [ ] 09-01-PLAN.md — Role-based user manuals: admin, scheduler, driver/technician guides
+- [x] 09-01-PLAN.md — Role-based user manuals: admin, scheduler, driver/technician guides
 - [ ] 09-02-PLAN.md — Swagger API documentation for all 14 route groups + Docker deployment guide + environment variable reference
 
 ---
