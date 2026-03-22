@@ -301,7 +301,11 @@ Plans:
 - [ ] New deployment can be stood up following the guide alone
 - [ ] Documentation reviewed for accuracy
 
-**Estimated plans:** 2
+**Plans:** 2 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — Role-based user manuals: admin, scheduler, driver/technician guides
+- [ ] 09-02-PLAN.md — Swagger API documentation for all 14 route groups + Docker deployment guide + environment variable reference
 
 ---
 
