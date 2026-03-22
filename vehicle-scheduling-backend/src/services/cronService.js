@@ -8,6 +8,7 @@ const cron = require('node-cron');
 const db = require('../config/database');
 const JobStatusService = require('./jobStatusService');
 const NotificationService = require('./notificationService');
+const GpsService = require('./gpsService');
 const logger = require('../config/logger').child({ service: 'cronService' });
 
 /**
@@ -73,7 +74,16 @@ function startCronJobs() {
     }
   });
 
-  logger.info('Cron jobs started (auto-transition + notification checks every 1 minute, cleanup daily 3AM)');
+  // GPS-02: Flush in-memory driver location cache to DB every 5 minutes (tiered storage)
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      await GpsService.flushLocationHistory();
+    } catch (err) {
+      logger.error({ err }, 'GPS history flush error');
+    }
+  });
+
+  logger.info('Cron jobs started (auto-transition + notification checks every 1 minute, GPS flush every 5 minutes, cleanup daily 3AM)');
 }
 
 module.exports = { startCronJobs };
