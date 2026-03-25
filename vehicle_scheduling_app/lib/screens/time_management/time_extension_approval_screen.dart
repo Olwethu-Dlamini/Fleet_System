@@ -76,10 +76,14 @@ class _TimeExtensionApprovalScreenState
 
   Color _suggestionTypeColor(String type) {
     switch (type) {
+      case 'none':
+        return Colors.green;
       case 'push':
         return Colors.blue;
-      case 'swap':
-        return Colors.green;
+      case 'reassign':
+        return Colors.teal;
+      case 'cancel':
+        return Colors.red;
       default:
         return Colors.orange;
     }
@@ -283,6 +287,16 @@ class _TimeExtensionApprovalScreenState
           final request = provider.activeRequest!;
           final suggestions = provider.suggestions;
           final affectedJobs = provider.affectedJobs;
+
+          // Auto-select recommended suggestion on first load
+          if (_selectedSuggestionId == null && suggestions.isNotEmpty) {
+            final recommended = suggestions.where((s) => s.recommended).toList();
+            if (recommended.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _selectedSuggestionId = recommended.first.id);
+              });
+            }
+          }
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
@@ -666,9 +680,23 @@ class _SuggestionCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Expanded(
-                    child: Text(
-                      suggestion.label,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          suggestion.label,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        if (suggestion.recommended)
+                          Text(
+                            'Recommended',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green.shade700,
+                            ),
+                          ),
+                      ],
                     ),
                   ),
                   Container(

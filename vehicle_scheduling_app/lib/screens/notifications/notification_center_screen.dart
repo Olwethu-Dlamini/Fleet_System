@@ -7,7 +7,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
+import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/models/app_notification.dart';
+import 'package:vehicle_scheduling_app/screens/time_management/time_extension_approval_screen.dart';
+import 'package:vehicle_scheduling_app/screens/jobs/job_detail_screen.dart';
+import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 
 class NotificationCenterScreen extends StatefulWidget {
   const NotificationCenterScreen({super.key});
@@ -78,6 +82,34 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
         );
       },
     );
+  }
+
+  void _navigateForNotification(AppNotification notif) {
+    if (notif.jobId == null) return;
+
+    final auth = context.read<AuthProvider>();
+
+    // Time extension request → admin/scheduler goes to approval screen
+    if (notif.type == 'time_extension_requested' &&
+        (auth.isAdmin || auth.hasPermission('jobs:update'))) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => TimeExtensionApprovalScreen(jobId: notif.jobId!),
+        ),
+      );
+      return;
+    }
+
+    // All other job notifications → open the job detail
+    final jobProvider = context.read<JobProvider>();
+    final job = jobProvider.allJobs.where((j) => j.id == notif.jobId).firstOrNull;
+    if (job != null) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => JobDetailScreen(job: job)),
+      );
+    }
   }
 
   @override
@@ -152,6 +184,7 @@ class _NotificationCenterScreenState extends State<NotificationCenterScreen> {
                     if (!notif.isRead) {
                       provider.markRead(notif.id);
                     }
+                    _navigateForNotification(notif);
                   },
                 );
               },
@@ -217,6 +250,12 @@ class _NotificationTile extends StatelessWidget {
         return Icons.warning_amber;
       case 'job_status_changed':
         return Icons.sync;
+      case 'time_extension_requested':
+        return Icons.timer_outlined;
+      case 'time_extension_approved':
+        return Icons.check_circle_outline;
+      case 'time_extension_denied':
+        return Icons.cancel_outlined;
       default:
         return Icons.notifications;
     }

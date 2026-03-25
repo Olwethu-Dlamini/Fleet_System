@@ -160,10 +160,15 @@ class TimeExtensionService {
 
       // Insert reschedule_options rows
       for (const suggestion of suggestions) {
+        const payload = {
+          changes: suggestion.changes,
+          recommended: suggestion.recommended || false,
+          metadata: suggestion.metadata || null,
+        };
         const [res] = await db.query(
           `INSERT INTO reschedule_options (request_id, tenant_id, type, label, changes_json)
            VALUES (?, ?, ?, ?, ?)`,
-          [request.id, tenantId, suggestion.type, suggestion.label, JSON.stringify(suggestion.changes)]
+          [request.id, tenantId, suggestion.type, suggestion.label, JSON.stringify(payload)]
         );
         suggestion.id = res.insertId;
       }
@@ -256,8 +261,8 @@ class TimeExtensionService {
       `SELECT j.id, j.job_number, j.scheduled_time_start, j.scheduled_time_end,
               j.current_status, j.customer_name,
               ja.driver_id, ja.vehicle_id,
-              CONCAT(COALESCE(ud.first_name, ''), ' ', COALESCE(ud.last_name, '')) AS driver_name,
-              (SELECT GROUP_CONCAT(CONCAT(COALESCE(u2.first_name, ''), ' ', COALESCE(u2.last_name, '')) SEPARATOR ', ')
+              COALESCE(ud.full_name, CONCAT('Driver #', ud.id)) AS driver_name,
+              (SELECT GROUP_CONCAT(COALESCE(u2.full_name, CONCAT('Tech #', u2.id)) SEPARATOR ', ')
                FROM job_technicians jt2
                JOIN users u2 ON u2.id = jt2.user_id
                WHERE jt2.job_id = j.id) AS technician_names,
@@ -344,7 +349,18 @@ class TimeExtensionService {
   static async _buildSuggestions(sourceJob, extensionMinutes, affectedJobs, tenantId) {
     const suggestions = [];
 
-    // 1. Push suggestion — always included
+    // ── 0. No-impact: just approve ──────────────────────────────────────────
+    if (affectedJobs.length === 0) {
+      suggestions.push({
+        type:        'none',
+        label:       'Approve — no other jobs affected',
+        recommended: true,
+        changes:     [],
+      });
+      return suggestions;
+    }
+
+    // ── 1. Push: shift all later jobs forward ───────────────────────────────
     const pushChanges = affectedJobs.map(j => ({
       jobId:        j.id,
       jobNumber:    j.job_number,
@@ -355,40 +371,39 @@ class TimeExtensionService {
     }));
 
     suggestions.push({
-      type:    'push',
-      label:   `Push all later jobs by ${extensionMinutes} min`,
-      changes: pushChanges,
+      type:        'push',
+      label:       `Push ${affectedJobs.length} job${affectedJobs.length > 1 ? 's' : ''} by ${extensionMinutes} min`,
+      recommended: affectedJobs.length <= 2,
+      changes:     pushChanges,
     });
 
-    // 2. Swap suggestion — only if a free driver/technician is available
+    // ── 2. Reassign driver on conflicting jobs ──────────────────────────────
     try {
-      // Determine current driver on source job
       const [sourceAssignment] = await db.query(
         `SELECT driver_id FROM job_assignments WHERE job_id = ? LIMIT 1`,
         [sourceJob.id]
       );
       const currentDriverId = sourceAssignment.length > 0 ? sourceAssignment[0].driver_id : null;
 
-      // New end time for overlap check (in seconds since midnight)
+      // Compute extended window in seconds
       const [h, m, s] = sourceJob.scheduled_time_end.split(':').map(Number);
-      const sourceEndSec = h * 3600 + m * 60 + s + extensionMinutes * 60;
-
-      // Source start in seconds
+      const sourceEndSec = h * 3600 + m * 60 + (s || 0) + extensionMinutes * 60;
       const [sh, sm, ss] = sourceJob.scheduled_time_start.split(':').map(Number);
-      const sourceStartSec = sh * 3600 + sm * 60 + ss;
+      const sourceStartSec = sh * 3600 + sm * 60 + (ss || 0);
 
-      // Find drivers not busy during the extension window
+      // Find available drivers not busy during the overlap window
       const [availableDrivers] = await db.query(
-        `SELECT DISTINCT u.id, u.first_name, u.last_name
+        `SELECT DISTINCT u.id, u.full_name
          FROM users u
          WHERE u.tenant_id = ?
-           AND u.role IN ('driver', 'technician')
+           AND u.role IN ('driver', 'dispatcher')
            AND u.is_active = 1
            AND u.id != ?
            AND u.id NOT IN (
-             SELECT jt.user_id
-             FROM job_technicians jt
-             JOIN jobs j2 ON j2.id = jt.job_id
+             SELECT COALESCE(ja2.driver_id, jt.user_id)
+             FROM jobs j2
+             LEFT JOIN job_assignments ja2 ON ja2.job_id = j2.id
+             LEFT JOIN job_technicians jt ON jt.job_id = j2.id
              WHERE j2.scheduled_date = ?
                AND j2.current_status NOT IN ('completed', 'cancelled')
                AND TIME_TO_SEC(j2.scheduled_time_start) < ?
@@ -399,23 +414,37 @@ class TimeExtensionService {
 
       if (availableDrivers.length > 0) {
         const driver = availableDrivers[0];
-        const driverName = `${driver.first_name || ''} ${driver.last_name || ''}`.trim() ||
-                           `Driver #${driver.id}`;
+        const driverName = (driver.full_name || '').trim() || `Driver #${driver.id}`;
+        const conflictJobNums = affectedJobs.map(j => j.job_number).join(', ');
         suggestions.push({
-          type:    'swap',
-          label:   `Reassign to ${driverName}`,
-          changes: [],
+          type:        'reassign',
+          label:       `Reassign ${conflictJobNums} to ${driverName}`,
+          recommended: false,
+          changes:     [],
+          metadata:    { availableDriverId: driver.id, availableDriverName: driverName },
         });
       }
     } catch (err) {
-      logger.warn({ err }, 'Swap suggestion check failed — skipping swap option');
+      logger.warn({ err }, 'Reassign suggestion check failed — skipping');
     }
 
-    // 3. Custom suggestion — always included
+    // ── 3. Cancel/unschedule the next conflicting job ───────────────────────
+    if (affectedJobs.length > 0) {
+      const nextJob = affectedJobs[0]; // first by start time
+      suggestions.push({
+        type:        'cancel',
+        label:       `Unschedule ${nextJob.job_number} and reschedule later`,
+        recommended: false,
+        changes:     [{ jobId: nextJob.id, jobNumber: nextJob.job_number, action: 'unschedule' }],
+      });
+    }
+
+    // ── 4. Custom: scheduler enters manual times ────────────────────────────
     suggestions.push({
-      type:    'custom',
-      label:   'Enter custom times',
-      changes: [],
+      type:        'custom',
+      label:       'Enter custom times',
+      recommended: false,
+      changes:     [],
     });
 
     return suggestions;
@@ -507,11 +536,16 @@ class TimeExtensionService {
       [request.id, tenantId]
     );
 
-    // Parse changes_json back to object
-    const parsedSuggestions = suggestions.map(s => ({
-      ...s,
-      changes: (() => { try { return JSON.parse(s.changes_json); } catch (_) { return []; } })(),
-    }));
+    // Parse changes_json back to object (supports new payload format with recommended/metadata)
+    const parsedSuggestions = suggestions.map(s => {
+      let parsed = {};
+      try { parsed = JSON.parse(s.changes_json); } catch (_) { parsed = {}; }
+      // Support both old format (array of changes) and new format ({ changes, recommended, metadata })
+      const changes = Array.isArray(parsed) ? parsed : (parsed.changes || []);
+      const recommended = Array.isArray(parsed) ? false : (parsed.recommended || false);
+      const metadata = Array.isArray(parsed) ? null : (parsed.metadata || null);
+      return { ...s, changes, recommended, metadata };
+    });
 
     return { request, suggestions: parsedSuggestions };
   }
@@ -591,7 +625,21 @@ class TimeExtensionService {
 
       // Apply changes to affected jobs
       for (const change of changes) {
-        if (!change.jobId || !change.newStart || !change.newEnd) continue;
+        if (!change.jobId) continue;
+
+        // Cancel/unschedule action: set job back to pending
+        if (change.action === 'unschedule') {
+          await connection.query(
+            `UPDATE jobs
+             SET current_status = 'pending', updated_at = NOW()
+             WHERE id = ? AND tenant_id = ?`,
+            [change.jobId, tenantId]
+          );
+          continue;
+        }
+
+        // Time shift action
+        if (!change.newStart || !change.newEnd) continue;
         await connection.query(
           `UPDATE jobs
            SET scheduled_time_start = ?, scheduled_time_end = ?, updated_at = NOW()

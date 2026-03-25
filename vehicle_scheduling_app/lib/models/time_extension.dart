@@ -44,8 +44,9 @@ class JobTimeChange {
 class RescheduleOption {
   final int id;
   final int requestId;
-  final String type; // push | swap | custom
+  final String type; // none | push | reassign | cancel | custom
   final String label;
+  final bool recommended;
   final List<JobTimeChange> changes;
 
   const RescheduleOption({
@@ -53,6 +54,7 @@ class RescheduleOption {
     required this.requestId,
     required this.type,
     required this.label,
+    this.recommended = false,
     required this.changes,
   });
 
@@ -72,6 +74,7 @@ class RescheduleOption {
       requestId: _parseInt(json['request_id'] ?? json['requestId']),
       type: (json['type'] ?? '').toString(),
       label: (json['label'] ?? '').toString(),
+      recommended: json['recommended'] == true,
       changes: parsed,
     );
   }
