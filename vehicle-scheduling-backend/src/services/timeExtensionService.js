@@ -151,7 +151,7 @@ class TimeExtensionService {
       const newEndTime = addMinutesToTime(job.scheduled_time_end, durationMinutes);
 
       affectedJobs = await TimeExtensionService.analyzeImpact(
-        jobId, newEndTime, job.scheduled_date, tenantId
+        jobId, newEndTime, job.scheduled_date, tenantId, job.scheduled_time_end
       );
 
       suggestions = await TimeExtensionService._buildSuggestions(
@@ -182,17 +182,19 @@ class TimeExtensionService {
 
   // ============================================
   // analyzeImpact
-  // Finds same-day jobs that share the driver OR vehicle with the source job
-  // and start at or after the new end time.
+  // Finds same-day jobs that share the driver, vehicle, or technician with
+  // the source job and whose time range overlaps the extension window
+  // [sourceJobCurrentEnd, newEndTime].
   // ============================================
   /**
-   * @param {number} jobId         - source job to exclude
-   * @param {string} newEndTime    - HH:MM:SS new end time after extension
-   * @param {string} scheduledDate - YYYY-MM-DD
+   * @param {number} jobId                - source job to exclude
+   * @param {string} newEndTime           - HH:MM:SS new end time after extension
+   * @param {string} scheduledDate        - YYYY-MM-DD
    * @param {number} tenantId
+   * @param {string} sourceJobCurrentEnd  - HH:MM:SS current end time of source job
    * @returns {Array}
    */
-  static async analyzeImpact(jobId, newEndTime, scheduledDate, tenantId) {
+  static async analyzeImpact(jobId, newEndTime, scheduledDate, tenantId, sourceJobCurrentEnd) {
     const [affected] = await db.query(
       `SELECT DISTINCT
          j.id, j.job_number, j.scheduled_date, j.scheduled_time_start, j.scheduled_time_end,
@@ -203,7 +205,8 @@ class TimeExtensionService {
          AND j.scheduled_date = ?
          AND j.id != ?
          AND j.current_status NOT IN ('completed', 'cancelled')
-         AND j.scheduled_time_start >= ?
+         AND j.scheduled_time_start < ?
+         AND j.scheduled_time_end > ?
          AND (
            ja.vehicle_id = (SELECT vehicle_id FROM job_assignments WHERE job_id = ? LIMIT 1)
            OR EXISTS (
@@ -212,12 +215,119 @@ class TimeExtensionService {
              JOIN job_technicians jt2 ON jt2.user_id = jt.user_id AND jt2.job_id = j.id
              WHERE jt.job_id = ?
            )
+           OR ja.driver_id IN (
+             SELECT driver_id FROM job_assignments WHERE job_id = ? AND driver_id IS NOT NULL
+           )
          )
        ORDER BY j.scheduled_time_start ASC`,
-      [tenantId, scheduledDate, jobId, newEndTime, jobId, jobId]
+      [tenantId, scheduledDate, jobId, newEndTime, sourceJobCurrentEnd, jobId, jobId, jobId]
     );
 
     return affected;
+  }
+
+  // ============================================
+  // getDaySchedule
+  // Returns all jobs for the same day as the source job, grouped by
+  // driver/technician personnel. Used by the scheduler approval screen.
+  // ============================================
+  /**
+   * @param {number} jobId
+   * @param {number} tenantId
+   * @returns {{ date: string, personnel: Array }}
+   */
+  static async getDaySchedule(jobId, tenantId) {
+    // Fetch the source job's scheduled_date
+    const [jobRows] = await db.query(
+      `SELECT scheduled_date FROM jobs WHERE id = ? AND tenant_id = ? LIMIT 1`,
+      [jobId, tenantId]
+    );
+
+    if (jobRows.length === 0) {
+      const err = new Error('Job not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const scheduledDate = jobRows[0].scheduled_date;
+
+    // Fetch all jobs for that date (excluding cancelled), with driver and technician info
+    const [rows] = await db.query(
+      `SELECT j.id, j.job_number, j.scheduled_time_start, j.scheduled_time_end,
+              j.current_status, j.customer_name,
+              ja.driver_id, ja.vehicle_id,
+              CONCAT(COALESCE(ud.first_name, ''), ' ', COALESCE(ud.last_name, '')) AS driver_name,
+              (SELECT GROUP_CONCAT(CONCAT(COALESCE(u2.first_name, ''), ' ', COALESCE(u2.last_name, '')) SEPARATOR ', ')
+               FROM job_technicians jt2
+               JOIN users u2 ON u2.id = jt2.user_id
+               WHERE jt2.job_id = j.id) AS technician_names,
+              (SELECT GROUP_CONCAT(jt3.user_id) FROM job_technicians jt3 WHERE jt3.job_id = j.id) AS technician_ids
+       FROM jobs j
+       LEFT JOIN job_assignments ja ON ja.job_id = j.id
+       LEFT JOIN users ud ON ud.id = ja.driver_id
+       WHERE j.tenant_id = ? AND j.scheduled_date = ? AND j.current_status != 'cancelled'
+       ORDER BY j.scheduled_time_start ASC`,
+      [tenantId, scheduledDate]
+    );
+
+    // Group jobs by personnel (driver first, then technicians)
+    const personnelMap = new Map();
+
+    for (const row of rows) {
+      const jobEntry = {
+        id: row.id,
+        job_number: row.job_number,
+        scheduled_time_start: row.scheduled_time_start,
+        scheduled_time_end: row.scheduled_time_end,
+        current_status: row.current_status,
+        customer_name: row.customer_name,
+        vehicle_id: row.vehicle_id,
+      };
+
+      // Add under driver if present
+      if (row.driver_id) {
+        const key = `driver_${row.driver_id}`;
+        if (!personnelMap.has(key)) {
+          const rawName = (row.driver_name || '').trim();
+          personnelMap.set(key, {
+            id: row.driver_id,
+            name: rawName || `Driver #${row.driver_id}`,
+            role: 'driver',
+            jobs: [],
+          });
+        }
+        personnelMap.get(key).jobs.push(jobEntry);
+      }
+
+      // Add under each technician if present (avoids duplication from driver already added)
+      if (row.technician_ids) {
+        const techIds = row.technician_ids.split(',').map(id => parseInt(id.trim(), 10));
+        const techNameList = row.technician_names
+          ? row.technician_names.split(',').map(n => n.trim())
+          : [];
+
+        techIds.forEach((techId, idx) => {
+          // Skip if this technician is already the driver (same person)
+          if (techId === row.driver_id) return;
+
+          const key = `tech_${techId}`;
+          if (!personnelMap.has(key)) {
+            personnelMap.set(key, {
+              id: techId,
+              name: techNameList[idx] || `Technician #${techId}`,
+              role: 'technician',
+              jobs: [],
+            });
+          }
+          personnelMap.get(key).jobs.push(jobEntry);
+        });
+      }
+    }
+
+    return {
+      date: scheduledDate,
+      personnel: Array.from(personnelMap.values()),
+    };
   }
 
   // ============================================
@@ -343,6 +453,28 @@ class TimeExtensionService {
         logger.warn({ err, schedulerId: scheduler.id }, 'Failed to notify scheduler');
       }
     }
+  }
+
+  // ============================================
+  // getPendingRequests
+  // Returns all pending time extension requests for a tenant, with job + requester info.
+  // ============================================
+  /**
+   * @param {number} tenantId
+   * @returns {Array<object>} list of pending requests with job_number and requester_name
+   */
+  static async getPendingRequests(tenantId) {
+    const [rows] = await db.query(
+      `SELECT ter.*, j.job_number, j.customer_name,
+              u.full_name AS requester_name
+       FROM time_extension_requests ter
+       JOIN jobs j ON j.id = ter.job_id
+       JOIN users u ON u.id = ter.requested_by
+       WHERE ter.tenant_id = ? AND ter.status = 'pending'
+       ORDER BY ter.created_at DESC`,
+      [tenantId]
+    );
+    return rows;
   }
 
   // ============================================

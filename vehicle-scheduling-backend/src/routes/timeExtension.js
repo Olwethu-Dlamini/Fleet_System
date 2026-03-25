@@ -177,6 +177,161 @@ router.post(
 
 /**
  * @swagger
+ * /time-extensions/pending:
+ *   get:
+ *     tags: [Time Extensions]
+ *     summary: List all pending time extension requests
+ *     description: Returns all pending time extension requests for the current tenant. Requires jobs:update permission (admin/scheduler).
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: List of pending requests
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 requests:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/TimeExtensionRequest'
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: jobs:update permission required
+ *       500:
+ *         description: Server error
+ */
+// ============================================
+// GET /api/time-extensions/pending
+// List all pending time extension requests for the tenant
+// Auth: verifyToken + jobs:update (admin/scheduler only)
+// ============================================
+router.get(
+  '/pending',
+  verifyToken,
+  requirePermission('jobs:update'),
+  async (req, res) => {
+    try {
+      const requests = await TimeExtensionService.getPendingRequests(req.user.tenant_id);
+      return res.status(200).json({ success: true, requests });
+    } catch (err) {
+      logger.error({ err }, 'getPendingRequests failed');
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+);
+
+/**
+ * @swagger
+ * /time-extensions/{jobId}/day-schedule:
+ *   get:
+ *     tags: [Time Extensions]
+ *     summary: Get the full day schedule for a job's scheduled date
+ *     description: Returns all jobs scheduled on the same day as the specified job, grouped by driver/technician. Used by the scheduler approval screen to see the full day picture. Requires jobs:update permission.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: jobId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: Job ID
+ *     responses:
+ *       200:
+ *         description: Day schedule grouped by personnel
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 date:
+ *                   type: string
+ *                   example: "2024-03-25"
+ *                 personnel:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       role:
+ *                         type: string
+ *                         enum: [driver, technician]
+ *                       jobs:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: jobs:update permission required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Job not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// ============================================
+// GET /api/time-extensions/:jobId/day-schedule
+// Returns full day schedule grouped by personnel for the scheduler approval screen
+// Auth: verifyToken + jobs:update (admin/scheduler only)
+// ============================================
+router.get(
+  '/:jobId/day-schedule',
+  verifyToken,
+  requirePermission('jobs:update'),
+  [
+    param('jobId').isInt({ min: 1 }).withMessage('jobId must be a positive integer'),
+  ],
+  async (req, res) => {
+    if (!validate(req, res)) return;
+
+    try {
+      const jobId = parseInt(req.params.jobId, 10);
+      const result = await TimeExtensionService.getDaySchedule(jobId, req.user.tenant_id);
+
+      return res.status(200).json({
+        success: true,
+        ...result,
+      });
+    } catch (err) {
+      if (err.statusCode === 404) {
+        return res.status(404).json({ success: false, error: err.message });
+      }
+      logger.error({ err, jobId: req.params.jobId }, 'getDaySchedule failed');
+      return res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /time-extensions/{jobId}:
  *   get:
  *     tags: [Time Extensions]
