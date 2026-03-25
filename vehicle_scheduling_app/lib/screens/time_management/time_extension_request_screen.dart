@@ -194,7 +194,39 @@ class _TimeExtensionRequestScreenState
               },
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 16),
+
+            // ── Impact preview info card ──────────────────────────────────
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.schedule,
+                    size: 16,
+                    color: Colors.orange,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Impact Preview: This request will be checked against all jobs for the same day involving your driver, technician team, and vehicle. The scheduler will see any conflicts before approving.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
 
             // ── Submit button ─────────────────────────────────────────────
             SizedBox(

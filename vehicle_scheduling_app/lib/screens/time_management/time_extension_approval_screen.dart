@@ -43,6 +43,11 @@ class _TimeExtensionApprovalScreenState
           .read<TimeExtensionProvider>()
           .loadActiveRequest(widget.jobId),
     );
+    Future.microtask(
+      () => context
+          .read<TimeExtensionProvider>()
+          .loadDaySchedule(widget.jobId),
+    );
   }
 
   @override
@@ -295,6 +300,14 @@ class _TimeExtensionApprovalScreenState
                 _AffectedJobsSection(
                   affectedJobs: affectedJobs,
                   formatDateTime: _formatDateTime,
+                ),
+                const SizedBox(height: 16),
+
+                // ── b2. Day Schedule Section ──────────────────────────────
+                _DayScheduleSection(
+                  personnel: provider.daySchedule,
+                  date: provider.dayScheduleDate,
+                  sourceJobId: widget.jobId,
                 ),
                 const SizedBox(height: 16),
 
@@ -730,6 +743,207 @@ class _SuggestionCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Day Schedule Section ──────────────────────────────────────────────────────
+
+class _DayScheduleSection extends StatelessWidget {
+  final List<DaySchedulePersonnel> personnel;
+  final String? date;
+  final int sourceJobId;
+
+  const _DayScheduleSection({
+    required this.personnel,
+    required this.date,
+    required this.sourceJobId,
+  });
+
+  String _formatTime(String? raw) {
+    if (raw == null || raw.isEmpty) return '-';
+    // raw is HH:MM:SS — display as HH:MM
+    final parts = raw.split(':');
+    if (parts.length >= 2) {
+      return '${parts[0].padLeft(2, '0')}:${parts[1].padLeft(2, '0')}';
+    }
+    return raw;
+  }
+
+  Color _statusColor(String status) {
+    switch (status) {
+      case 'completed':
+        return Colors.green;
+      case 'in_progress':
+        return Colors.blue;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.orange;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dateLabel = date != null && date!.isNotEmpty ? ' ($date)' : '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Day Schedule$dateLabel',
+          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+        const SizedBox(height: 8),
+        if (personnel.isEmpty)
+          const Text(
+            'No schedule data available',
+            style: TextStyle(color: Colors.grey),
+          )
+        else
+          ...personnel.map((person) {
+            final roleColor =
+                person.role == 'driver' ? Colors.blue : Colors.green;
+
+            return Card(
+              elevation: 1,
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header row: name + role badge
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            person.name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: roleColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: roleColor.withOpacity(0.4),
+                            ),
+                          ),
+                          child: Text(
+                            person.role.toUpperCase(),
+                            style: TextStyle(
+                              color: roleColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    // Job list
+                    ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: person.jobs.length,
+                      separatorBuilder: (_, __) =>
+                          const Divider(height: 1),
+                      itemBuilder: (context, index) {
+                        final job = person.jobs[index];
+                        final isSourceJob = job.id == sourceJobId;
+
+                        return Container(
+                          color: isSourceJob
+                              ? Colors.yellow.withOpacity(0.15)
+                              : null,
+                          child: ListTile(
+                            dense: true,
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 4),
+                            title: Row(
+                              children: [
+                                Text(
+                                  'Job #${job.jobNumber}',
+                                  style: TextStyle(
+                                    fontWeight: isSourceJob
+                                        ? FontWeight.bold
+                                        : FontWeight.w500,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                if (isSourceJob) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 6,
+                                      vertical: 1,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.amber.withOpacity(0.3),
+                                      borderRadius:
+                                          BorderRadius.circular(8),
+                                    ),
+                                    child: const Text(
+                                      'this job',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            subtitle: Row(
+                              children: [
+                                Text(
+                                  '${_formatTime(job.scheduledTimeStart)} - ${_formatTime(job.scheduledTimeEnd)}',
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: _statusColor(job.currentStatus)
+                                        .withOpacity(0.15),
+                                    borderRadius:
+                                        BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    job.currentStatus.replaceAll('_', ' '),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: _statusColor(job.currentStatus),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
     );
   }
 }
