@@ -598,7 +598,11 @@ class TimeExtensionService {
           [suggestionId, requestId]
         );
         if (opts.length > 0) {
-          try { changes = JSON.parse(opts[0].changes_json); } catch (_) { changes = []; }
+          try {
+            const parsed = JSON.parse(opts[0].changes_json);
+            // Support both old format (array) and new format ({changes, recommended, metadata})
+            changes = Array.isArray(parsed) ? parsed : (parsed.changes || []);
+          } catch (_) { changes = []; }
         }
       } else if (customChanges && customChanges.length > 0) {
         changes = customChanges;
@@ -623,9 +627,10 @@ class TimeExtensionService {
         [requestRow.duration_minutes, requestRow.duration_minutes, requestRow.job_id, tenantId]
       );
 
-      // Apply changes to affected jobs
+      // Apply changes to affected jobs (accept both camelCase and snake_case keys)
       for (const change of changes) {
-        if (!change.jobId) continue;
+        const jobId = change.jobId || change.job_id;
+        if (!jobId) continue;
 
         // Cancel/unschedule action: set job back to pending
         if (change.action === 'unschedule') {
@@ -633,18 +638,20 @@ class TimeExtensionService {
             `UPDATE jobs
              SET current_status = 'pending', updated_at = NOW()
              WHERE id = ? AND tenant_id = ?`,
-            [change.jobId, tenantId]
+            [jobId, tenantId]
           );
           continue;
         }
 
         // Time shift action
-        if (!change.newStart || !change.newEnd) continue;
+        const newStart = change.newStart || change.new_start;
+        const newEnd = change.newEnd || change.new_end;
+        if (!newStart || !newEnd) continue;
         await connection.query(
           `UPDATE jobs
            SET scheduled_time_start = ?, scheduled_time_end = ?, updated_at = NOW()
            WHERE id = ? AND tenant_id = ?`,
-          [change.newStart, change.newEnd, change.jobId, tenantId]
+          [newStart, newEnd, jobId, tenantId]
         );
       }
 
