@@ -433,7 +433,7 @@ class TimeExtensionService {
       const nextJob = affectedJobs[0]; // first by start time
       suggestions.push({
         type:        'cancel',
-        label:       `Unschedule ${nextJob.job_number} and reschedule later`,
+        label:       `Cancel ${nextJob.job_number} and remove from vehicle`,
         recommended: false,
         changes:     [{ jobId: nextJob.id, jobNumber: nextJob.job_number, action: 'unschedule' }],
       });
@@ -632,13 +632,23 @@ class TimeExtensionService {
         const jobId = change.jobId || change.job_id;
         if (!jobId) continue;
 
-        // Cancel/unschedule action: set job back to pending
+        // Cancel/unschedule action: cancel job and remove vehicle/driver assignment
         if (change.action === 'unschedule') {
           await connection.query(
             `UPDATE jobs
-             SET current_status = 'pending', updated_at = NOW()
+             SET current_status = 'cancelled', updated_at = NOW()
              WHERE id = ? AND tenant_id = ?`,
             [jobId, tenantId]
+          );
+          // Remove vehicle + driver assignment so the car is freed up
+          await connection.query(
+            'DELETE FROM job_assignments WHERE job_id = ?',
+            [jobId]
+          );
+          // Remove technician assignments
+          await connection.query(
+            'DELETE FROM job_technicians WHERE job_id = ?',
+            [jobId]
           );
           continue;
         }
