@@ -59,6 +59,25 @@ class TimeExtensionService {
     };
   }
 
+  // ── GET /api/time-extensions/pending ──────────────────────────────────────
+  /// Returns all pending time extension requests for the tenant.
+  Future<List<TimeExtensionRequest>> getPendingRequests() async {
+    final response = await _api.get(
+      '${AppConfig.timeExtensionsEndpoint}/pending',
+    );
+
+    final rawRequests = response['requests'];
+    final List<TimeExtensionRequest> requests = [];
+    if (rawRequests is List) {
+      for (final item in rawRequests) {
+        if (item is Map<String, dynamic>) {
+          requests.add(TimeExtensionRequest.fromJson(item));
+        }
+      }
+    }
+    return requests;
+  }
+
   // ── GET /api/time-extensions/:jobId ───────────────────────────────────────
   /// Returns the active (pending/approved) request for a job, if any.
   Future<Map<String, dynamic>> getActiveRequest(int jobId) async {
@@ -84,6 +103,31 @@ class TimeExtensionService {
     return {
       'request': request,
       'suggestions': suggestions,
+    };
+  }
+
+  // ── GET /api/time-extensions/:jobId/day-schedule ──────────────────────────
+  /// Returns the full day schedule grouped by personnel for the given job's date.
+  /// Response map has keys: 'date' (String) and 'personnel' (List<DaySchedulePersonnel>).
+  Future<Map<String, dynamic>> getDaySchedule(int jobId) async {
+    final response = await _api.get(
+      '${AppConfig.timeExtensionsEndpoint}/$jobId/day-schedule',
+    );
+
+    final date = (response['date'] ?? '').toString();
+    final rawPersonnel = response['personnel'];
+    final List<DaySchedulePersonnel> personnel = [];
+    if (rawPersonnel is List) {
+      for (final item in rawPersonnel) {
+        if (item is Map<String, dynamic>) {
+          personnel.add(DaySchedulePersonnel.fromJson(item));
+        }
+      }
+    }
+
+    return {
+      'date': date,
+      'personnel': personnel,
     };
   }
 

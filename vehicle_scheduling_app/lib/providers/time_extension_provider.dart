@@ -13,6 +13,9 @@ class TimeExtensionProvider extends ChangeNotifier {
   TimeExtensionRequest? _activeRequest;
   List<RescheduleOption> _suggestions = [];
   List<AffectedJob> _affectedJobs = [];
+  List<TimeExtensionRequest> _pendingRequests = [];
+  List<DaySchedulePersonnel> _daySchedule = [];
+  String? _dayScheduleDate;
   bool _loading = false;
   String? _error;
 
@@ -20,8 +23,23 @@ class TimeExtensionProvider extends ChangeNotifier {
   TimeExtensionRequest? get activeRequest => _activeRequest;
   List<RescheduleOption> get suggestions => List.unmodifiable(_suggestions);
   List<AffectedJob> get affectedJobs => List.unmodifiable(_affectedJobs);
+  List<TimeExtensionRequest> get pendingRequests => List.unmodifiable(_pendingRequests);
+  List<DaySchedulePersonnel> get daySchedule => List.unmodifiable(_daySchedule);
+  String? get dayScheduleDate => _dayScheduleDate;
   bool get isLoading => _loading;
   String? get error => _error;
+
+  // ── loadPendingRequests ───────────────────────────────────────────────────
+  /// Loads all pending time extension requests (admin/scheduler).
+  Future<void> loadPendingRequests() async {
+    try {
+      _pendingRequests = await _service.getPendingRequests();
+    } catch (e) {
+      // ignore: avoid_print
+      print('TimeExtensionProvider.loadPendingRequests error: $e');
+    }
+    notifyListeners();
+  }
 
   // ── submitRequest ─────────────────────────────────────────────────────────
   /// Submits a new time extension request for a job.
@@ -72,6 +90,25 @@ class TimeExtensionProvider extends ChangeNotifier {
       _error = e.toString();
       // ignore: avoid_print
       print('TimeExtensionProvider.loadActiveRequest error: $e');
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  // ── loadDaySchedule ───────────────────────────────────────────────────────
+  /// Loads the full day schedule grouped by personnel for the given job's date.
+  Future<void> loadDaySchedule(int jobId) async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      final result = await _service.getDaySchedule(jobId);
+      _daySchedule = result['personnel'] as List<DaySchedulePersonnel>;
+      _dayScheduleDate = result['date'] as String?;
+    } catch (e) {
+      // ignore: avoid_print
+      print('TimeExtensionProvider.loadDaySchedule error: $e');
     } finally {
       _loading = false;
       notifyListeners();
@@ -133,6 +170,9 @@ class TimeExtensionProvider extends ChangeNotifier {
     _activeRequest = null;
     _suggestions = [];
     _affectedJobs = [];
+    _pendingRequests = [];
+    _daySchedule = [];
+    _dayScheduleDate = null;
     _loading = false;
     _error = null;
     notifyListeners();

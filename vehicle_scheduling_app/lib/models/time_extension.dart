@@ -118,6 +118,98 @@ class AffectedJob {
   }
 }
 
+// ── A single job entry in the day schedule ───────────────────────────────────
+class DayScheduleJob {
+  final int id;
+  final String jobNumber;
+  final String scheduledTimeStart;
+  final String scheduledTimeEnd;
+  final String currentStatus;
+  final String? customerName;
+  final int? driverId;
+  final int? vehicleId;
+  final String? driverName;
+  final String? technicianNames;
+
+  const DayScheduleJob({
+    required this.id,
+    required this.jobNumber,
+    required this.scheduledTimeStart,
+    required this.scheduledTimeEnd,
+    required this.currentStatus,
+    this.customerName,
+    this.driverId,
+    this.vehicleId,
+    this.driverName,
+    this.technicianNames,
+  });
+
+  factory DayScheduleJob.fromJson(Map<String, dynamic> json) {
+    return DayScheduleJob(
+      id: _parseInt(json['id']),
+      jobNumber: (json['job_number'] ?? json['jobNumber'] ?? '').toString(),
+      scheduledTimeStart:
+          (json['scheduled_time_start'] ?? '').toString(),
+      scheduledTimeEnd:
+          (json['scheduled_time_end'] ?? '').toString(),
+      currentStatus: (json['current_status'] ?? '').toString(),
+      customerName: json['customer_name'] as String?,
+      driverId: json['driver_id'] == null ? null : _parseInt(json['driver_id']),
+      vehicleId: json['vehicle_id'] == null ? null : _parseInt(json['vehicle_id']),
+      driverName: json['driver_name'] as String?,
+      technicianNames: json['technician_names'] as String?,
+    );
+  }
+
+  static int _parseInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    return int.tryParse(v.toString()) ?? 0;
+  }
+}
+
+// ── A personnel entry grouping jobs in the day schedule ─────────────────────
+class DaySchedulePersonnel {
+  final int id;
+  final String name;
+  final String role; // 'driver' or 'technician'
+  final List<DayScheduleJob> jobs;
+
+  const DaySchedulePersonnel({
+    required this.id,
+    required this.name,
+    required this.role,
+    required this.jobs,
+  });
+
+  factory DaySchedulePersonnel.fromJson(Map<String, dynamic> json) {
+    final rawJobs = json['jobs'];
+    final List<DayScheduleJob> parsedJobs = [];
+    if (rawJobs is List) {
+      for (final item in rawJobs) {
+        if (item is Map<String, dynamic>) {
+          parsedJobs.add(DayScheduleJob.fromJson(item));
+        }
+      }
+    }
+
+    return DaySchedulePersonnel(
+      id: _parseInt(json['id']),
+      name: (json['name'] ?? '').toString(),
+      role: (json['role'] ?? '').toString(),
+      jobs: parsedJobs,
+    );
+  }
+
+  static int _parseInt(dynamic v) {
+    if (v == null) return 0;
+    if (v is int) return v;
+    if (v is double) return v.toInt();
+    return int.tryParse(v.toString()) ?? 0;
+  }
+}
+
 // ── A time extension request (the main model) ─────────────────────────────────
 class TimeExtensionRequest {
   final int id;
@@ -128,6 +220,9 @@ class TimeExtensionRequest {
   final String status; // pending | approved | denied
   final String? denialReason;
   final DateTime createdAt;
+  final String? jobNumber;
+  final String? requesterName;
+  final String? customerName;
 
   const TimeExtensionRequest({
     required this.id,
@@ -138,6 +233,9 @@ class TimeExtensionRequest {
     required this.status,
     this.denialReason,
     required this.createdAt,
+    this.jobNumber,
+    this.requesterName,
+    this.customerName,
   });
 
   factory TimeExtensionRequest.fromJson(Map<String, dynamic> json) {
@@ -151,6 +249,9 @@ class TimeExtensionRequest {
       status: (json['status'] ?? 'pending').toString(),
       denialReason: json['denial_reason'] as String?,
       createdAt: _parseDateTime(json['created_at'] ?? json['createdAt']),
+      jobNumber: json['job_number'] as String?,
+      requesterName: json['requester_name'] as String?,
+      customerName: json['customer_name'] as String?,
     );
   }
 
