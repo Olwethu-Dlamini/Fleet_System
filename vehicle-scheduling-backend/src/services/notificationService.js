@@ -61,7 +61,7 @@ async function checkUpcomingJobs() {
     SELECT
       j.id           AS job_id,
       j.job_number,
-      j.title        AS job_title,
+      j.description  AS job_title,
       j.scheduled_date,
       j.scheduled_time_start,
       j.tenant_id,
@@ -167,7 +167,7 @@ async function checkOverdueJobs() {
     SELECT
       j.id           AS job_id,
       j.job_number,
-      j.title        AS job_title,
+      j.description  AS job_title,
       j.scheduled_date,
       j.scheduled_time_end,
       j.tenant_id,

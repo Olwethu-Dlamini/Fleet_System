@@ -19,6 +19,7 @@ const db                    = require('../config/database');
 const { verifyToken, requirePermission } = require('../middleware/authMiddleware');
 const { body }              = require('express-validator');
 const validate              = require('../middleware/validate');
+const { paginate }          = require('../utils/paginate');
 const logger = require('../config/logger');
 const log    = logger.child({ service: 'jobs-route' });
 
@@ -37,7 +38,12 @@ const createJobValidation = [
     .withMessage('customer_address is required'),
   body('scheduled_date')
     .isDate({ format: 'YYYY-MM-DD' })
-    .withMessage('scheduled_date must be YYYY-MM-DD format'),
+    .withMessage('scheduled_date must be YYYY-MM-DD format')
+    .custom((value) => {
+      const today = new Date().toISOString().slice(0, 10);
+      if (value < today) throw new Error('scheduled_date cannot be in the past');
+      return true;
+    }),
   body('scheduled_time_start')
     .matches(/^\d{2}:\d{2}(:\d{2})?$/)
     .withMessage('scheduled_time_start must be HH:MM or HH:MM:SS'),
@@ -140,29 +146,112 @@ const updateJobValidation = [
 // Admin / Scheduler  → all jobs
 // Technician         → their own jobs only (same as /my-jobs)
 //
-// Having a single endpoint that auto-scopes by role means the Flutter
-// app can always call GET /api/jobs without needing to know which
-// endpoint to use — but we keep /my-jobs for explicit use too.
+// Query params:
+//   search    — search customer_name, job_number, description (LIKE %search%)
+//   status    — filter by current_status
+//   job_type  — filter by job_type
+//   date_from — filter by scheduled_date >= date_from
+//   date_to   — filter by scheduled_date <= date_to
+//   priority  — filter by priority
+//   page      — pagination page (default 1)
+//   limit     — rows per page (default 20, max 200)
+//
+// Backwards compatible: if no pagination params, returns all (limit defaults high)
 // ==========================================
 router.get('/', verifyToken, async (req, res) => {
   try {
-    const { status, job_type, priority } = req.query;
-    const filters = {};
-    if (status)   filters.status   = status;
-    if (job_type) filters.job_type = job_type;
-    if (priority) filters.priority = priority;
+    const { search, status, job_type, priority, date_from, date_to, page, limit } = req.query;
 
-    let jobs;
+    const conditions = ['1=1'];
+    const params     = [];
 
+    // Role scoping: technicians only see their own jobs
     if (req.user.role === 'technician') {
-      // Technicians only see jobs they are assigned to
-      jobs = await Job.getJobsByTechnician(req.user.id, filters);
-    } else {
-      // Admin / Scheduler / Dispatcher see everything
-      jobs = await Job.getAllJobs(filters);
+      conditions.push(`(ja.driver_id = ? OR EXISTS (
+        SELECT 1 FROM job_technicians jt_scope WHERE jt_scope.job_id = j.id AND jt_scope.user_id = ?
+      ))`);
+      params.push(req.user.id, req.user.id);
     }
 
-    res.json({ success: true, jobs, count: jobs.length });
+    // Search across customer_name, job_number, description
+    if (search && search.trim()) {
+      conditions.push('(j.customer_name LIKE ? OR j.job_number LIKE ? OR j.description LIKE ?)');
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+    }
+
+    if (status) {
+      conditions.push('j.current_status = ?');
+      params.push(status);
+    }
+
+    if (job_type) {
+      conditions.push('j.job_type = ?');
+      params.push(job_type);
+    }
+
+    if (priority) {
+      conditions.push('j.priority = ?');
+      params.push(priority);
+    }
+
+    if (date_from) {
+      conditions.push('j.scheduled_date >= ?');
+      params.push(date_from);
+    }
+
+    if (date_to) {
+      conditions.push('j.scheduled_date <= ?');
+      params.push(date_to);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const selectCols = `
+      j.id, j.job_number, j.job_type, j.customer_name, j.customer_phone,
+      j.customer_address, j.destination_lat, j.destination_lng, j.description,
+      j.scheduled_date, j.scheduled_time_start, j.scheduled_time_end,
+      j.estimated_duration_minutes, j.current_status, j.priority, j.created_at,
+      ja.vehicle_id, ja.driver_id,
+      v.vehicle_name, v.license_plate,
+      u.full_name AS driver_name,
+      ${Job._technicianSubquery}
+    `;
+
+    const dataQuery = `
+      SELECT ${selectCols}
+      FROM jobs j
+      LEFT JOIN job_assignments ja ON j.id = ja.job_id
+      LEFT JOIN vehicles v ON ja.vehicle_id = v.id
+      LEFT JOIN users u ON ja.driver_id = u.id
+      WHERE ${where}
+      ORDER BY j.scheduled_date DESC, j.scheduled_time_start DESC
+    `;
+
+    const countQuery = `
+      SELECT COUNT(*) AS total
+      FROM jobs j
+      LEFT JOIN job_assignments ja ON j.id = ja.job_id
+      WHERE ${where}
+    `;
+
+    const result = await paginate(db, {
+      dataQuery,
+      countQuery,
+      params,
+      page:  page  || 1,
+      limit: limit || 20,
+    });
+
+    // Apply model's date fixing and technician parsing
+    const jobs = Job._parseTechnicians(Job._fixDates(result.rows));
+
+    res.json({
+      success: true,
+      jobs,
+      count: jobs.length,
+      pagination: result.pagination,
+    });
   } catch (error) {
     log.error({ err: error }, 'GET /jobs error');
     res.status(500).json({ success: false, error: error.message });

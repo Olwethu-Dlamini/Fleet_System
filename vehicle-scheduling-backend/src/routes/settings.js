@@ -72,11 +72,11 @@ router.get('/', verifyToken, requirePermission('settings:read'), async (req, res
     const tenant_id = req.user.tenant_id || 1;
 
     const [rows] = await db.query(
-      'SELECT setting_key, setting_val FROM settings WHERE tenant_id = ?',
+      'SELECT setting_key, setting_value FROM settings WHERE tenant_id = ?',
       [tenant_id],
     );
 
-    const settings = Object.fromEntries(rows.map(r => [r.setting_key, r.setting_val]));
+    const settings = Object.fromEntries(rows.map(r => [r.setting_key, r.setting_value]));
     res.json({ success: true, settings });
   } catch (err) {
     log.error({ err }, 'GET /api/settings error');
@@ -153,7 +153,7 @@ router.get('/:key', verifyToken, requirePermission('settings:read'), async (req,
     const { key }   = req.params;
 
     const [rows] = await db.query(
-      'SELECT setting_val FROM settings WHERE tenant_id = ? AND setting_key = ?',
+      'SELECT setting_value FROM settings WHERE tenant_id = ? AND setting_key = ?',
       [tenant_id, key],
     );
 
@@ -161,7 +161,7 @@ router.get('/:key', verifyToken, requirePermission('settings:read'), async (req,
       return res.status(404).json({ success: false, message: `Setting "${key}" not found` });
     }
 
-    res.json({ success: true, key, value: rows[0].setting_val });
+    res.json({ success: true, key, value: rows[0].setting_value });
   } catch (err) {
     log.error({ err }, 'GET /api/settings/:key error');
     res.status(500).json({ success: false, error: err.message });
@@ -255,14 +255,14 @@ router.put('/:key',
       const { value } = req.body;
 
       const [result] = await db.query(
-        'UPDATE settings SET setting_val = ? WHERE tenant_id = ? AND setting_key = ?',
+        'UPDATE settings SET setting_value = ? WHERE tenant_id = ? AND setting_key = ?',
         [value, tenant_id, key],
       );
 
       if (result.affectedRows === 0) {
         // Key does not exist yet — insert it
         await db.query(
-          'INSERT INTO settings (tenant_id, setting_key, setting_val) VALUES (?, ?, ?)',
+          'INSERT INTO settings (tenant_id, setting_key, setting_value) VALUES (?, ?, ?)',
           [tenant_id, key, value],
         );
       }
