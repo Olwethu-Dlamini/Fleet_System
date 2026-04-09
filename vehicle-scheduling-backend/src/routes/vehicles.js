@@ -7,9 +7,11 @@
 const express = require('express');
 const router  = express.Router();
 const Vehicle = require('../models/Vehicle');
+const db      = require('../config/database');
 const { verifyToken, adminOnly } = require('../middleware/authMiddleware');
 const { body }  = require('express-validator');
 const validate  = require('../middleware/validate');
+const { paginate } = require('../utils/paginate');
 
 // verifyToken + adminOnly bundled so every write route is self-contained.
 // verifyToken populates req.user; adminOnly checks req.user.role === 'admin'.
@@ -86,11 +88,66 @@ const updateVehicleValidation = [
  */
 // ============================================================
 // GET /api/vehicles
+// Query params:
+//   search    — search vehicle_name, license_plate, make, model (LIKE %search%)
+//   status    — filter by is_active ('true' or 'false'); legacy: activeOnly=true
+//   page      — pagination page (default 1)
+//   limit     — rows per page (default 20, max 200)
 // ============================================================
 router.get('/', async (req, res) => {
   try {
-    const vehicles = await Vehicle.getAllVehicles(req.query.activeOnly === 'true');
-    res.json({ success: true, data: vehicles, count: vehicles.length });
+    const { search, status, activeOnly, page, limit } = req.query;
+
+    const conditions = [];
+    const params     = [];
+
+    // Search across vehicle_name, license_plate, vehicle_type
+    if (search && search.trim()) {
+      conditions.push('(v.vehicle_name LIKE ? OR v.license_plate LIKE ? OR v.vehicle_type LIKE ?)');
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+    }
+
+    // status=true/false or legacy activeOnly=true
+    if (status === 'true' || status === 'false') {
+      conditions.push('v.is_active = ?');
+      params.push(status === 'true' ? 1 : 0);
+    } else if (activeOnly === 'true') {
+      conditions.push('v.is_active = 1');
+    }
+
+    const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+    const selectCols = `
+      v.id, v.vehicle_name, v.license_plate, v.vehicle_type,
+      v.capacity_kg, v.is_active, v.last_maintenance_date,
+      v.notes, v.created_at, v.updated_at,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM vehicle_maintenance vm
+        WHERE vm.vehicle_id = v.id
+          AND vm.status IN ('scheduled', 'in_progress')
+          AND vm.start_date <= CURDATE()
+          AND vm.end_date   >= CURDATE()
+      ) THEN 1 ELSE 0 END AS is_in_maintenance
+    `;
+
+    const dataQuery  = `SELECT ${selectCols} FROM vehicles v ${where} ORDER BY v.vehicle_name ASC`;
+    const countQuery = `SELECT COUNT(*) AS total FROM vehicles v ${where}`;
+
+    const result = await paginate(db, {
+      dataQuery,
+      countQuery,
+      params,
+      page:  page  || 1,
+      limit: limit || 20,
+    });
+
+    res.json({
+      success: true,
+      data: result.rows,
+      count: result.rows.length,
+      pagination: result.pagination,
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

@@ -24,6 +24,8 @@ const settingsRoutes           = require('./settings');            // ← Phase 
 const notificationRoutes       = require('./notifications');        // ← Phase 5
 const timeExtensionRoutes      = require('./timeExtension');         // ← Phase 6
 const gpsRoutes                = require('./gps');                    // ← Phase 7
+const emeraldRoutes            = require('./emerald');                  // ← Emerald integration
+const auditRoutes              = require('./audit');                    // ← Auth hardening
 
 // ==========================================
 // REGISTER ROUTES
@@ -43,6 +45,8 @@ router.use('/settings',            settingsRoutes);             // /api/settings
 router.use('/notifications',       notificationRoutes);         // /api/notifications ← Phase 5
 router.use('/time-extensions',     timeExtensionRoutes);         // /api/time-extensions ← Phase 6
 router.use('/gps',                 gpsRoutes);                    // /api/gps ← Phase 7
+router.use('/emerald',             emeraldRoutes);                  // /api/emerald ← Emerald integration
+router.use('/audit',               auditRoutes);                    // /api/audit ← Auth hardening
 
 // ==========================================
 // HEALTH CHECK

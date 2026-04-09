@@ -19,6 +19,7 @@ const db      = require('../config/database');
 const bcrypt  = require('bcryptjs');
 const logger  = require('../config/logger');
 const log     = logger.child({ service: 'users-route' });
+const { paginate } = require('../utils/paginate');
 
 // Use shared middleware so role checks use the same USER_ROLE constants as JWT
 const { verifyToken, adminOnly, schedulerOrAbove } = require('../middleware/authMiddleware');
@@ -154,14 +155,26 @@ const normaliseUser = u => ({ ...u, role: fromDbRole(u.role) });
  */
 // ============================================================
 // GET /api/users
-// Query: role (optional), active ('1'|'0'|'all', default '1')
+// Query params:
+//   search — search full_name, username, email (LIKE %search%)
+//   role   — filter by role (optional)
+//   active — filter by is_active ('1'|'0'|'all', default '1')
+//   page   — pagination page (default 1)
+//   limit  — rows per page (default 20, max 200)
 // ============================================================
 router.get('/', requireAdminOrScheduler, async (req, res) => {
   try {
-    const { role, active = '1' } = req.query;
+    const { search, role, active = '1', page, limit } = req.query;
 
     const conditions = [];
     const params     = [];
+
+    // Search across full_name, username, email
+    if (search && search.trim()) {
+      conditions.push('(full_name LIKE ? OR username LIKE ? OR email LIKE ?)');
+      const term = `%${search.trim()}%`;
+      params.push(term, term, term);
+    }
 
     if (role) {
       conditions.push('role = ?');
@@ -175,13 +188,26 @@ router.get('/', requireAdminOrScheduler, async (req, res) => {
 
     const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-    const [rows] = await db.query(
-      `SELECT id, username, full_name, role, email, is_active, contact_phone, contact_phone_secondary, created_at
-       FROM users ${where} ORDER BY full_name ASC`,
-      params,
-    );
+    const dataQuery = `
+      SELECT id, username, full_name, role, email, is_active, contact_phone, contact_phone_secondary, created_at
+      FROM users ${where} ORDER BY full_name ASC
+    `;
+    const countQuery = `SELECT COUNT(*) AS total FROM users ${where}`;
 
-    res.json({ success: true, users: rows.map(normaliseUser), count: rows.length });
+    const result = await paginate(db, {
+      dataQuery,
+      countQuery,
+      params,
+      page:  page  || 1,
+      limit: limit || 20,
+    });
+
+    res.json({
+      success: true,
+      users: result.rows.map(normaliseUser),
+      count: result.rows.length,
+      pagination: result.pagination,
+    });
   } catch (err) {
     log.error({ err: err }, 'GET /api/users error');
     res.status(500).json({ success: false, error: err.message });

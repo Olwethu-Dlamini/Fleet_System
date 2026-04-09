@@ -1241,4 +1241,188 @@ router.get('/executive-dashboard', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /reports/export/csv:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Export job data as CSV
+ *     description: Returns a downloadable CSV file of job data with optional filters. Includes vehicle and driver assignments.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: date_from
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Start date (YYYY-MM-DD, default 30 days ago)
+ *       - in: query
+ *         name: date_to
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: End date (YYYY-MM-DD, default today)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, assigned, in_progress, completed, cancelled]
+ *         description: Filter by job status
+ *       - in: query
+ *         name: job_type
+ *         schema:
+ *           type: string
+ *           enum: [installation, delivery, miscellaneous]
+ *         description: Filter by job type
+ *     responses:
+ *       200:
+ *         description: CSV file download
+ *         content:
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *       401:
+ *         description: Not authenticated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       403:
+ *         description: Scheduler or admin role required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/reports/export/csv
+// Export job data as a downloadable CSV file with optional filtering.
+// Joins job_assignments, vehicles, users to include vehicle/driver names.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get('/export/csv', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = parseDateRange(req.query);
+    const { status, job_type } = req.query;
+
+    const conditions = ['j.scheduled_date BETWEEN ? AND ?'];
+    const params     = [dateFrom, dateTo];
+
+    if (status) {
+      conditions.push('j.current_status = ?');
+      params.push(status);
+    }
+
+    if (job_type) {
+      conditions.push('j.job_type = ?');
+      params.push(job_type);
+    }
+
+    const where = conditions.join(' AND ');
+
+    const [rows] = await db.query(
+      `SELECT
+         j.job_number,
+         j.job_type,
+         j.customer_name,
+         j.customer_address,
+         j.scheduled_date,
+         j.scheduled_time_start,
+         j.scheduled_time_end,
+         j.current_status,
+         j.priority,
+         v.vehicle_name,
+         u.full_name AS driver_name
+       FROM jobs j
+       LEFT JOIN job_assignments ja ON ja.job_id = j.id
+       LEFT JOIN vehicles v         ON v.id = ja.vehicle_id
+       LEFT JOIN users u            ON u.id = ja.driver_id
+       WHERE ${where}
+       ORDER BY j.scheduled_date ASC, j.scheduled_time_start ASC`,
+      params
+    );
+
+    // Build CSV content
+    const csvHeaders = [
+      'Job Number',
+      'Job Type',
+      'Customer Name',
+      'Customer Address',
+      'Scheduled Date',
+      'Start Time',
+      'End Time',
+      'Status',
+      'Priority',
+      'Vehicle',
+      'Driver',
+    ];
+
+    /**
+     * Escape a CSV field value:
+     *  - Convert to string, replace internal double-quotes with ""
+     *  - Wrap in double-quotes if the value contains comma, newline, or double-quote
+     */
+    function escapeCsvField(value) {
+      if (value === null || value === undefined) return '';
+      const str = String(value);
+      if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+        return '"' + str.replace(/"/g, '""') + '"';
+      }
+      return str;
+    }
+
+    /**
+     * Format a MySQL date value to YYYY-MM-DD string.
+     * Handles Date objects (from MySQL driver) and strings.
+     */
+    function formatDate(val) {
+      if (!val) return '';
+      if (typeof val === 'string' && /^\d{4}-\d{2}-\d{2}/.test(val)) {
+        return val.slice(0, 10);
+      }
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return String(val);
+      const y   = d.getFullYear();
+      const m   = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    const csvLines = [csvHeaders.map(escapeCsvField).join(',')];
+
+    for (const row of rows) {
+      const line = [
+        row.job_number,
+        row.job_type,
+        row.customer_name,
+        row.customer_address,
+        formatDate(row.scheduled_date),
+        row.scheduled_time_start || '',
+        row.scheduled_time_end   || '',
+        row.current_status,
+        row.priority,
+        row.vehicle_name || '',
+        row.driver_name  || '',
+      ].map(escapeCsvField).join(',');
+      csvLines.push(line);
+    }
+
+    const csvContent = csvLines.join('\r\n');
+    const today      = new Date().toISOString().slice(0, 10);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename=report_${today}.csv`);
+    res.send(csvContent);
+  } catch (err) {
+    log.error({ err: err }, 'GET /reports/export/csv error');
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
