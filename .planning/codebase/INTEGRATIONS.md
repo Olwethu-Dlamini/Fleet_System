@@ -10,7 +10,7 @@
   - Usage: `vehicle_scheduling_app/lib/widgets/common/location_picker_popup.dart`
   - Features: Map widget, tap-to-select location, latitude/longitude capture
   - Configuration: API key in `android/app/src/main/AndroidManifest.xml` (line 14-15)
-    - Key: AIzaSyAzF9BaCiVjkSZytnLS_85WDkxebS3MZhE
+    - Key: YOUR_GOOGLE_MAPS_API_KEY
   - iOS: Requires key in `ios/Runner/Info.plist` (currently not configured)
 
 **Device Geolocation:**
@@ -242,7 +242,7 @@ APP_NAME=Vehicle Scheduling API      # Used in responses
 
 **Google Maps API Key Configuration:**
 - Android: `android/app/src/main/AndroidManifest.xml` line 14-15
-  - Key: AIzaSyAzF9BaCiVjkSZytnLS_85WDkxebS3MZhE
+  - Key: YOUR_GOOGLE_MAPS_API_KEY
   - Meta-data tag: `com.google.android.geo.API_KEY`
 - iOS: Not configured in Info.plist (needs to be added)
   - Key should be added to `ios/Runner/Info.plist`

@@ -396,7 +396,7 @@ Both tables follow established project conventions: `ADD COLUMN IF NOT EXISTS` /
 ### Pitfall 3: Google Maps API Key Missing on Android
 **What goes wrong:** Map renders blank/grey with "For Development Purposes Only" watermark or no map at all.
 **Why it happens:** The API key in `AndroidManifest.xml` must match the key enabled for "Maps SDK for Android" in Google Cloud Console.
-**How to avoid:** The key `AIzaSyAzF9BaCiVjkSZytnLS_85WDkxebS3MZhE` is already in `AndroidManifest.xml`. Backend needs `GOOGLE_MAPS_API_KEY` in `.env` with "Routes API" enabled separately. Verify both are enabled in GCP Console.
+**How to avoid:** The key `YOUR_GOOGLE_MAPS_API_KEY` is already in `AndroidManifest.xml`. Backend needs `GOOGLE_MAPS_API_KEY` in `.env` with "Routes API" enabled separately. Verify both are enabled in GCP Console.
 **Warning signs:** Map tile loading errors in logcat; Routes API returning 403.
 
 ### Pitfall 4: iOS Location — `NSLocationWhenInUseUsageDescription` Already Present
@@ -560,7 +560,7 @@ io.on('connection', (socket) => {
 ## Open Questions
 
 1. **GOOGLE_MAPS_API_KEY already in AndroidManifest.xml as hardcoded value**
-   - What we know: The key `AIzaSyAzF9BaCiVjkSZytnLS_85WDkxebS3MZhE` is hardcoded in `android/app/src/main/AndroidManifest.xml`. The CONTEXT.md decision says to use `.env` (GOOGLE_MAPS_API_KEY) for the backend.
+   - What we know: The key `YOUR_GOOGLE_MAPS_API_KEY` is hardcoded in `android/app/src/main/AndroidManifest.xml`. The CONTEXT.md decision says to use `.env` (GOOGLE_MAPS_API_KEY) for the backend.
    - What's unclear: Whether this same key is enabled for "Routes API" in Google Cloud Console (not just Maps SDK for Android). The Flutter key and backend key can be different; both need to be active.
    - Recommendation: The plan should include a verification task — confirm Routes API is enabled for the key used by the backend. The Flutter manifest key handles map display; the backend key handles Routes API calls. They can be the same key as long as both APIs are enabled in GCP.
 
