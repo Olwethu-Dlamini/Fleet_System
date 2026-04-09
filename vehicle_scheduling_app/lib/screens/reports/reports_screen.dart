@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/services/report_service.dart';
+import 'package:vehicle_scheduling_app/screens/vehicles/vehicle_utilization_screen.dart';
+import 'package:vehicle_scheduling_app/services/csv_download.dart' as csv_dl;
 
 // ════════════════════════════════════════════════════════════════
 // DESIGN TOKENS
@@ -133,7 +135,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: 5, vsync: this);
+    _tabs = TabController(length: 6, vsync: this);
     _load();
   }
 
@@ -213,6 +215,135 @@ class _ReportsScreenState extends State<ReportsScreen>
     _load();
   }
 
+  // ── CSV Export ─────────────────────────────────────────────────
+  void _exportCurrentTabCsv() {
+    if (_data == null) return;
+    final tabIndex = _tabs.index;
+    String csv;
+    String filename;
+    final range = '${_fmtDate(_from)}_to_${_fmtDate(_to)}';
+
+    switch (tabIndex) {
+      case 0: // Overview
+        csv = _buildOverviewCsv(_data!);
+        filename = 'overview_$range.csv';
+        break;
+      case 1: // Vehicles
+        csv = _buildVehiclesCsv(_data!);
+        filename = 'vehicles_$range.csv';
+        break;
+      case 2: // Technicians
+        csv = _buildTechniciansCsv(_data!);
+        filename = 'technicians_$range.csv';
+        break;
+      case 3: // Job Types
+        csv = _buildJobTypesCsv(_data!);
+        filename = 'job_types_$range.csv';
+        break;
+      case 4: // Cancellations
+        csv = _buildCancellationsCsv();
+        filename = 'cancellations_$range.csv';
+        break;
+      case 5: // Utilization — no report service data, skip
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Utilization tab uses live data. Switch to another tab to export.'),
+            backgroundColor: AppTheme.warningColor,
+          ),
+        );
+        return;
+      default:
+        return;
+    }
+
+    try {
+      csv_dl.downloadCsvFile(csv, filename);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Exported $filename'),
+          backgroundColor: AppTheme.successColor,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Export failed: $e'),
+          backgroundColor: AppTheme.errorColor,
+        ),
+      );
+    }
+  }
+
+  String _buildOverviewCsv(ExecutiveDashboardData data) {
+    final s = data.summary;
+    final buf = StringBuffer();
+    buf.writeln('Metric,Value');
+    buf.writeln('Total Jobs,${s.total}');
+    buf.writeln('Completed,${s.completed}');
+    buf.writeln('In Progress,${s.inProgress}');
+    buf.writeln('Assigned,${s.assigned}');
+    buf.writeln('Pending,${s.pending}');
+    buf.writeln('Cancelled,${s.cancelled}');
+    buf.writeln('Completion Rate,${s.completionRate.toStringAsFixed(1)}%');
+    buf.writeln('Cancellation Rate,${s.cancellationRate.toStringAsFixed(1)}%');
+    buf.writeln('Active Vehicles,${s.activeVehicles}');
+    buf.writeln('Active Technicians,${s.activeTechnicians}');
+    buf.writeln('Avg Jobs/Day,${s.avgJobsPerDay.toStringAsFixed(1)}');
+    if (data.dailyVolume.isNotEmpty) {
+      buf.writeln('');
+      buf.writeln('Date,Total,Completed,Cancelled');
+      for (final d in data.dailyVolume) {
+        buf.writeln('${d.date},${d.total},${d.completed},${d.cancelled}');
+      }
+    }
+    return buf.toString();
+  }
+
+  String _buildVehiclesCsv(ExecutiveDashboardData data) {
+    final buf = StringBuffer();
+    buf.writeln('Vehicle Name,License Plate,Type,Total Jobs,Completed,Cancelled,In Progress,Days Used,Utilisation %');
+    for (final v in data.vehicles) {
+      buf.writeln('"${v.vehicleName}","${v.licensePlate}","${v.vehicleType}",${v.totalJobs},${v.completed},${v.cancelled},${v.inProgress},${v.daysUsed},${v.utilisationPct.toStringAsFixed(1)}');
+    }
+    return buf.toString();
+  }
+
+  String _buildTechniciansCsv(ExecutiveDashboardData data) {
+    final buf = StringBuffer();
+    buf.writeln('Full Name,Total Jobs,Completed,Cancelled,Completion Rate %,Cancellation Rate %');
+    for (final t in data.technicians) {
+      buf.writeln('"${t.fullName}",${t.totalJobs},${t.completed},${t.cancelled},${t.completionRate.toStringAsFixed(1)},${t.cancellationRate.toStringAsFixed(1)}');
+    }
+    return buf.toString();
+  }
+
+  String _buildJobTypesCsv(ExecutiveDashboardData data) {
+    final buf = StringBuffer();
+    buf.writeln('Job Type,Total,Completed,Cancelled,In Progress,Pending,Completion Rate %');
+    for (final t in data.byType) {
+      buf.writeln('"${t.jobType}",${t.total},${t.completed},${t.cancelled},${t.inProgress},${t.pending},${t.completionRate.toStringAsFixed(1)}');
+    }
+    return buf.toString();
+  }
+
+  String _buildCancellationsCsv() {
+    final buf = StringBuffer();
+    if (_cancelReasons != null && _cancelReasons!.isNotEmpty) {
+      buf.writeln('Cancellation Reason,Count');
+      for (final r in _cancelReasons!) {
+        buf.writeln('"${r.reason}",${r.count}');
+      }
+      buf.writeln('');
+    }
+    buf.writeln('Customer Name,Job Type,Priority,Scheduled Date,Cancel Reason,Vehicle,Technicians');
+    if (_cancelJobs != null) {
+      for (final j in _cancelJobs!) {
+        buf.writeln('"${j.customerName}","${j.jobType}","${j.priority}","${j.scheduledDate}","${j.cancelReason ?? ''}","${j.vehicleName ?? ''}","${j.technicianNames ?? ''}"');
+      }
+    }
+    return buf.toString();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -236,8 +367,18 @@ class _ReportsScreenState extends State<ReportsScreen>
                   reasons: _cancelReasons ?? [],
                   jobs: _cancelJobs ?? [],
                 ),
+                const VehicleUtilizationBody(),
               ],
             ),
+      floatingActionButton: (_data != null && !_loading)
+          ? FloatingActionButton.extended(
+              onPressed: _exportCurrentTabCsv,
+              icon: const Icon(Icons.download),
+              label: const Text('Export CSV'),
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+            )
+          : null,
     );
   }
 
@@ -245,7 +386,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   AppBar _buildAppBar() {
     return AppBar(
       title: const Text('Analytics'),
-      automaticallyImplyLeading: false,
+      automaticallyImplyLeading: true,
       actions: [
         // Date-range preset chips
         _PresetChip('7D', () => _preset(7)),
@@ -345,6 +486,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 Tab(text: 'TECHNICIANS'),
                 Tab(text: 'JOB TYPES'),
                 Tab(text: 'CANCELLATIONS'),
+                Tab(text: 'UTILIZATION'),
               ],
             ),
           ],

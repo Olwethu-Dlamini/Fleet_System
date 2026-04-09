@@ -28,6 +28,7 @@ import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
 import 'package:vehicle_scheduling_app/screens/reports/reports_screen.dart'; // ← NEW
 import 'package:vehicle_scheduling_app/screens/settings/admin_settings_screen.dart';
 import 'package:vehicle_scheduling_app/screens/gps/live_tracking_screen.dart';
+import 'package:vehicle_scheduling_app/screens/jobs/data_export_screen.dart';
 import 'package:vehicle_scheduling_app/services/fcm_service.dart';
 
 void main() async {
@@ -147,13 +148,15 @@ class _AuthGateState extends State<AuthGate> {
 }
 
 // ============================================
-// MAIN APP — bottom navigation container
+// MAIN APP — bottom navigation + "More" menu
 //
 // Tab layout per role:
 //
-//   admin      → Dashboard | Jobs | Vehicles | Schedule | Tracking | Users | Reports | Settings
-//   scheduler  → Dashboard | Jobs | Vehicles | Schedule | Tracking
-//   technician → Dashboard | My Jobs
+//   admin      → Bottom: Dashboard | Jobs | Schedule | More
+//                More:   Vehicles, Tracking, Users, Reports, Settings
+//   scheduler  → Bottom: Dashboard | Jobs | Schedule | More
+//                More:   Vehicles, Tracking
+//   technician → Bottom: Dashboard | My Jobs
 // ============================================
 class MainApp extends StatefulWidget {
   const MainApp({super.key});
@@ -196,27 +199,12 @@ class _MainAppState extends State<MainApp> {
       return [const DashboardScreen(), const JobsListScreen()];
     }
 
-    if (auth.isAdmin) {
-      return [
-        const DashboardScreen(), // 0
-        const JobsListScreen(), // 1
-        const VehiclesListScreen(), // 2
-        const SchedulerScreen(), // 3
-        const LiveTrackingScreen(), // 4
-        const UsersScreen(), // 5
-        const ReportsScreen(), // 6
-        if (auth.hasPermission('settings:read'))
-          const AdminSettingsScreen(), // 7
-      ];
-    }
-
-    // Scheduler
+    // Admin & Scheduler: Dashboard | Jobs | Schedule | More
     return [
       const DashboardScreen(),
       const JobsListScreen(),
-      const VehiclesListScreen(),
       const SchedulerScreen(),
-      const LiveTrackingScreen(), // 4
+      _MoreMenuScreen(isAdmin: auth.isAdmin),
     ];
   }
 
@@ -239,53 +227,7 @@ class _MainAppState extends State<MainApp> {
       ];
     }
 
-    if (auth.isAdmin) {
-      return [
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard_outlined),
-          activeIcon: Icon(Icons.dashboard),
-          label: 'Dashboard',
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.work_outline),
-          activeIcon: Icon(Icons.work),
-          label: 'Jobs',
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.local_shipping_outlined),
-          activeIcon: Icon(Icons.local_shipping),
-          label: 'Vehicles',
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.calendar_today_outlined),
-          activeIcon: Icon(Icons.calendar_today),
-          label: 'Schedule',
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.map_outlined),
-          activeIcon: Icon(Icons.map),
-          label: 'Tracking',
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.people_outline),
-          activeIcon: Icon(Icons.people),
-          label: 'Users',
-        ),
-        const BottomNavigationBarItem(
-          icon: Icon(Icons.bar_chart_outlined),
-          activeIcon: Icon(Icons.bar_chart),
-          label: 'Reports',
-        ),
-        if (auth.hasPermission('settings:read'))
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-      ];
-    }
-
-    // Scheduler — no Users or Reports tab
+    // Admin & Scheduler
     return const [
       BottomNavigationBarItem(
         icon: Icon(Icons.dashboard_outlined),
@@ -298,19 +240,14 @@ class _MainAppState extends State<MainApp> {
         label: 'Jobs',
       ),
       BottomNavigationBarItem(
-        icon: Icon(Icons.local_shipping_outlined),
-        activeIcon: Icon(Icons.local_shipping),
-        label: 'Vehicles',
-      ),
-      BottomNavigationBarItem(
         icon: Icon(Icons.calendar_today_outlined),
         activeIcon: Icon(Icons.calendar_today),
         label: 'Schedule',
       ),
       BottomNavigationBarItem(
-        icon: Icon(Icons.map_outlined),
-        activeIcon: Icon(Icons.map),
-        label: 'Tracking',
+        icon: Icon(Icons.menu_outlined),
+        activeIcon: Icon(Icons.menu),
+        label: 'More',
       ),
     ];
   }
@@ -318,10 +255,6 @@ class _MainAppState extends State<MainApp> {
   // ==========================================
   // FAB
   // Jobs tab (index 1) for admin/scheduler → New Job
-  // Schedule tab (index 3)                 → SchedulerScreen owns its own FAB
-  // Tracking tab (index 4)                 → no FAB (map screen)
-  // Users tab (index 5, admin)             → no FAB here; UsersScreen has its own
-  // Reports tab (index 6, admin)           → no FAB
   // Technician                             → no FAB
   // ==========================================
   Widget? _buildFab(AuthProvider auth, int currentIndex) {
@@ -339,4 +272,119 @@ class _MainAppState extends State<MainApp> {
     }
     return null;
   }
+}
+
+// ============================================
+// MORE MENU — clean grid of navigation items
+// ============================================
+class _MoreMenuScreen extends StatelessWidget {
+  final bool isAdmin;
+
+  const _MoreMenuScreen({required this.isAdmin});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = <_MoreMenuItem>[
+      _MoreMenuItem(
+        icon: Icons.local_shipping,
+        label: 'Vehicles',
+        color: const Color(0xFF43A047),
+        screen: const VehiclesListScreen(),
+      ),
+      _MoreMenuItem(
+        icon: Icons.map,
+        label: 'Live Tracking',
+        color: const Color(0xFF1E88E5),
+        screen: const LiveTrackingScreen(),
+      ),
+      if (isAdmin) ...[
+        _MoreMenuItem(
+          icon: Icons.people,
+          label: 'Users',
+          color: const Color(0xFF8E24AA),
+          screen: const UsersScreen(),
+        ),
+        _MoreMenuItem(
+          icon: Icons.bar_chart,
+          label: 'Reports',
+          color: const Color(0xFFE65100),
+          screen: const ReportsScreen(),
+        ),
+        _MoreMenuItem(
+          icon: Icons.download,
+          label: 'Export Data',
+          color: const Color(0xFF00838F),
+          screen: const DataExportScreen(),
+        ),
+        _MoreMenuItem(
+          icon: Icons.settings,
+          label: 'Settings',
+          color: const Color(0xFF546E7A),
+          screen: const AdminSettingsScreen(),
+        ),
+      ],
+    ];
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('More'),
+        backgroundColor: AppTheme.primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
+      ),
+      body: ListView.separated(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const Divider(height: 1, indent: 72),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return ListTile(
+            leading: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: item.color.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(item.icon, color: item.color, size: 24),
+            ),
+            title: Text(
+              item.label,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+            trailing: Icon(
+              Icons.chevron_right,
+              color: AppTheme.textHint,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 4,
+            ),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => item.screen),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _MoreMenuItem {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final Widget screen;
+
+  const _MoreMenuItem({
+    required this.icon,
+    required this.label,
+    required this.color,
+    required this.screen,
+  });
 }

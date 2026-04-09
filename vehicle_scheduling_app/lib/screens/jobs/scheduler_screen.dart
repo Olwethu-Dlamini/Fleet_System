@@ -103,6 +103,7 @@ class SchedulerScreen extends StatefulWidget {
 
 class _SchedulerScreenState extends State<SchedulerScreen> {
   String _view = 'day';
+  String _groupBy = 'vehicles'; // 'vehicles' or 'clients'
   DateTime _date = DateTime.now();
 
   static const _startH = 8;
@@ -298,6 +299,8 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
                 children: [
                   _viewToggle(isMobile),
                   const SizedBox(width: 8),
+                  _groupToggle(isMobile),
+                  const SizedBox(width: 8),
                   _navBtn(Icons.chevron_left, _prev, 'Previous'),
                   _navBtn(Icons.today, _today, 'Today'),
                   _navBtn(Icons.chevron_right, _next, 'Next'),
@@ -374,8 +377,12 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
               padding: EdgeInsets.all(isMobile ? 8 : 14),
               child: vLoad || jLoad
                   ? const Center(child: CircularProgressIndicator())
-                  : vehicles.isEmpty
+                  : vehicles.isEmpty && _groupBy == 'vehicles'
                   ? _emptyState()
+                  : _groupBy == 'clients'
+                  ? _view == 'day'
+                      ? _dayViewClients(allJobs, isMobile)
+                      : _weekViewClients(allJobs, isMobile)
                   : _view == 'day'
                   ? _dayView(allJobs, vehicles, isMobile)
                   : _weekView(allJobs, vehicles, isMobile),
@@ -790,6 +797,344 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
   // ══════════════════════════════════════════════════════════════════════════
   // WEEK VIEW
   // ══════════════════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════════════════
+  // CLIENT-GROUPED DAY VIEW
+  // ══════════════════════════════════════════════════════════════════════════
+  Widget _dayViewClients(List<Job> all, bool mob) {
+    final dayJobs = _onDay(all, _date);
+    // Group by customer name
+    final Map<String, List<Job>> grouped = {};
+    for (final j in dayJobs) {
+      grouped.putIfAbsent(j.customerName, () => []).add(j);
+    }
+    final clients = grouped.keys.toList()..sort();
+    if (clients.isEmpty) return _emptyState();
+
+    final colW = _mobileColW;
+    final gridW = _timeW + colW * clients.length;
+
+    return Card(
+      elevation: 3,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      color: _P.card,
+      child: Column(
+        children: [
+          SingleChildScrollView(
+            controller: _dayHH,
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            child: SizedBox(
+              width: gridW,
+              child: _clientDayHeader(clients, colW, mob),
+            ),
+          ),
+          const Divider(height: 1, color: _P.divider),
+          Expanded(
+            child: Scrollbar(
+              controller: _dayV,
+              thumbVisibility: true,
+              trackVisibility: !mob,
+              child: SingleChildScrollView(
+                controller: _dayV,
+                child: SingleChildScrollView(
+                  controller: _dayH,
+                  scrollDirection: Axis.horizontal,
+                  physics: mob
+                      ? const BouncingScrollPhysics()
+                      : const ClampingScrollPhysics(),
+                  child: SizedBox(
+                    width: gridW,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _timeColumn(),
+                        ...clients.map(
+                          (client) => SizedBox(
+                            width: colW,
+                            child: _slotStack(grouped[client]!, mob),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _bottomScrollbar(_dayHB, gridW, mob),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientDayHeader(List<String> clients, double colW, bool mob) {
+    return Container(
+      decoration: const BoxDecoration(color: _P.header),
+      child: Row(
+        children: [
+          SizedBox(
+            width: _timeW,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+              child: Text(
+                'Time',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: mob ? 13 : 14,
+                  color: const Color.fromARGB(255, 101, 139, 100),
+                ),
+              ),
+            ),
+          ),
+          ...clients.map(
+            (name) => _clientCell(name, colW, mob),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _clientCell(String name, double w, bool mob) {
+    return Container(
+      width: w,
+      padding: EdgeInsets.symmetric(vertical: mob ? 8 : 12, horizontal: 10),
+      decoration: const BoxDecoration(
+        color: _P.header,
+        border: Border(left: BorderSide(color: _P.divider)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: _P.deliv.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(Icons.person_rounded, size: 18, color: _P.deliv),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              name,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: mob ? 13 : 14,
+                color: _P.tMain,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // CLIENT-GROUPED WEEK VIEW
+  // ══════════════════════════════════════════════════════════════════════════
+  Widget _weekViewClients(List<Job> all, bool mob) {
+    final ws = _weekStart(_date);
+    final days = List.generate(5, (i) => ws.add(Duration(days: i)));
+    final gridW = _labelW + _weekColW * days.length;
+
+    // Collect all unique clients across the week
+    final Set<String> clientSet = {};
+    for (final d in days) {
+      for (final j in _onDay(all, d)) {
+        clientSet.add(j.customerName);
+      }
+    }
+    final clients = clientSet.toList()..sort();
+    if (clients.isEmpty) return _emptyState();
+
+    return Card(
+      elevation: 3,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      clipBehavior: Clip.antiAlias,
+      color: _P.card,
+      child: Column(
+        children: [
+          SingleChildScrollView(
+            controller: _weekHH,
+            scrollDirection: Axis.horizontal,
+            physics: const NeverScrollableScrollPhysics(),
+            child: SizedBox(
+              width: gridW,
+              child: _weekHeaderClients(days, mob),
+            ),
+          ),
+          const Divider(height: 1, color: _P.divider),
+          Expanded(
+            child: Scrollbar(
+              controller: _weekV,
+              thumbVisibility: true,
+              trackVisibility: !mob,
+              child: SingleChildScrollView(
+                controller: _weekV,
+                child: SingleChildScrollView(
+                  controller: _weekH,
+                  scrollDirection: Axis.horizontal,
+                  physics: mob
+                      ? const BouncingScrollPhysics()
+                      : const ClampingScrollPhysics(),
+                  child: SizedBox(
+                    width: gridW,
+                    child: Column(
+                      children: clients.map(
+                        (client) => _weekRowClient(all, client, days, mob),
+                      ).toList(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _bottomScrollbar(_weekHB, gridW, mob),
+        ],
+      ),
+    );
+  }
+
+  Widget _weekHeaderClients(List<DateTime> days, bool mob) {
+    return Container(
+      decoration: const BoxDecoration(color: _P.header),
+      child: Row(
+        children: [
+          Container(
+            width: _labelW,
+            height: 52,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: _P.header,
+              border: Border(
+                right: BorderSide(color: _P.divider),
+                bottom: BorderSide(color: _P.divider),
+              ),
+            ),
+            child: Text(
+              'Client',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: mob ? 13 : 15,
+                color: _P.tSub,
+              ),
+            ),
+          ),
+          ...days.map((d) {
+            final isToday = _same(d, DateTime.now());
+            return Container(
+              width: _weekColW,
+              height: 52,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: isToday ? _P.inst.withOpacity(0.07) : _P.header,
+                border: const Border(
+                  left: BorderSide(color: _P.divider),
+                  bottom: BorderSide(color: _P.divider),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    _dayName(d),
+                    style: TextStyle(
+                      fontSize: mob ? 12 : 14,
+                      fontWeight: FontWeight.w700,
+                      color: isToday ? _P.inst : _P.tMain,
+                    ),
+                  ),
+                  Text(
+                    '${d.day}',
+                    style: TextStyle(
+                      fontSize: mob ? 11 : 13,
+                      color: isToday ? _P.inst : _P.tSub,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _weekRowClient(
+    List<Job> all,
+    String client,
+    List<DateTime> days,
+    bool mob,
+  ) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: _P.divider)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: _labelW,
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+            decoration: const BoxDecoration(
+              color: _P.header,
+              border: Border(right: BorderSide(color: _P.divider)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 30,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    color: _P.deliv.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.person_rounded, size: 16, color: _P.deliv),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    client,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: mob ? 12 : 13,
+                      color: _P.tMain,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...days.map((d) {
+            final jobs = _onDay(all, d)
+                .where((j) => j.customerName == client)
+                .toList();
+            return Container(
+              width: _weekColW,
+              padding: const EdgeInsets.all(4),
+              decoration: const BoxDecoration(
+                border: Border(left: BorderSide(color: _P.divider)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: jobs.isEmpty
+                    ? [const SizedBox(height: 40)]
+                    : jobs.map((j) => _weekChip(j, mob)).toList(),
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _weekView(List<Job> all, List<Vehicle> vehicles, bool mob) {
     final ws = _weekStart(_date);
     final days = List.generate(5, (i) => ws.add(Duration(days: i)));
@@ -1189,6 +1534,33 @@ class _SchedulerScreenState extends State<SchedulerScreen> {
       ],
       selected: {_view},
       onSelectionChanged: (s) => setState(() => _view = s.first),
+      style: ButtonStyle(
+        padding: WidgetStateProperty.all(
+          const EdgeInsets.symmetric(horizontal: 12),
+        ),
+        textStyle: WidgetStateProperty.all(
+          const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (st) => st.contains(WidgetState.selected)
+              ? Colors.white
+              : Colors.white.withOpacity(0.15),
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (st) => st.contains(WidgetState.selected) ? _P.navBar : Colors.white,
+        ),
+      ),
+    );
+  }
+
+  Widget _groupToggle(bool mob) {
+    return SegmentedButton<String>(
+      segments: const [
+        ButtonSegment(value: 'vehicles', label: Text('Vehicles')),
+        ButtonSegment(value: 'clients', label: Text('Clients')),
+      ],
+      selected: {_groupBy},
+      onSelectionChanged: (s) => setState(() => _groupBy = s.first),
       style: ButtonStyle(
         padding: WidgetStateProperty.all(
           const EdgeInsets.symmetric(horizontal: 12),

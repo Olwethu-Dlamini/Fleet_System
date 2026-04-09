@@ -13,6 +13,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/models/user.dart';
@@ -33,6 +34,19 @@ class _UsersScreenState extends State<UsersScreen> {
   bool _loading = true;
   String? _error;
   String? _roleFilter; // null = all
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  List<User> get _filteredUsers {
+    if (_searchQuery.isEmpty) return _users;
+    return _users.where((u) {
+      final q = _searchQuery;
+      return u.fullName.toLowerCase().contains(q) ||
+          u.username.toLowerCase().contains(q) ||
+          u.email.toLowerCase().contains(q) ||
+          u.role.toLowerCase().contains(q);
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -273,21 +287,66 @@ class _UsersScreenState extends State<UsersScreen> {
       );
     }
 
-    final filtered = _roleFilter == null
+    final roleFiltered = _roleFilter == null
         ? _users
         : _users.where((u) => u.role == _roleFilter).toList();
+    final filtered = _searchQuery.isEmpty
+        ? roleFiltered
+        : roleFiltered.where((u) {
+            final q = _searchQuery;
+            return u.fullName.toLowerCase().contains(q) ||
+                u.username.toLowerCase().contains(q) ||
+                u.email.toLowerCase().contains(q);
+          }).toList();
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: const Text('System Users'),
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _load),
         ],
       ),
       body: Column(
         children: [
+          // ── Search bar ────────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search users...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppTheme.dividerColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppTheme.dividerColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                ),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+            ),
+          ),
+
           // ── Role filter chips ──────────────────────────────
           Container(
             color: Colors.white,
@@ -341,7 +400,45 @@ class _UsersScreenState extends State<UsersScreen> {
           // ── List ───────────────────────────────────────────
           Expanded(
             child: _loading
-                ? const Center(child: CircularProgressIndicator())
+                ? Shimmer.fromColors(
+                    baseColor: Colors.grey.shade300,
+                    highlightColor: Colors.grey.shade100,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 5,
+                      itemBuilder: (_, index) {
+                        final nameWidth = [120.0, 100.0, 140.0, 110.0, 130.0][index % 5];
+                        final emailWidth = [150.0, 130.0, 170.0, 140.0, 160.0][index % 5];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              children: [
+                                const CircleAvatar(radius: 22, backgroundColor: Colors.white),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(height: 14, width: nameWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                                      const SizedBox(height: 8),
+                                      Container(height: 10, width: emailWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                      const SizedBox(height: 6),
+                                      Container(height: 10, width: 70, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                    ],
+                                  ),
+                                ),
+                                Container(height: 24, width: 70, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12))),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  )
                 : _error != null
                 ? _buildError()
                 : filtered.isEmpty

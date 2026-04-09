@@ -46,7 +46,9 @@ import 'package:vehicle_scheduling_app/providers/job_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
 import 'package:vehicle_scheduling_app/services/api_service.dart';
 import 'package:vehicle_scheduling_app/screens/jobs/job_detail_screen.dart';
-import 'package:vehicle_scheduling_app/screens/users/users_screen.dart';
+import 'package:vehicle_scheduling_app/screens/jobs/scheduler_screen.dart';
+import 'package:vehicle_scheduling_app/screens/time_management/time_extension_approval_screen.dart';
+import 'package:vehicle_scheduling_app/providers/time_extension_provider.dart';
 import 'package:vehicle_scheduling_app/widgets/common/notification_bell.dart';
 import 'package:vehicle_scheduling_app/providers/notification_provider.dart';
 import 'package:vehicle_scheduling_app/providers/gps_provider.dart';
@@ -212,10 +214,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    // Admin / Scheduler — load all jobs and vehicles
+    // Admin / Scheduler — load all jobs, vehicles, and pending time extensions
     await Future.wait([
       context.read<JobProvider>().loadJobs(),
       context.read<VehicleProvider>().loadVehicles(),
+      context.read<TimeExtensionProvider>().loadPendingRequests(),
     ]);
 
     if (!mounted) return;
@@ -344,15 +347,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           ],
-          if (auth.isAdmin)
-            IconButton(
-              icon: const Icon(Icons.people_outlined),
-              tooltip: 'Manage Users',
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const UsersScreen()),
-              ),
-            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -814,14 +808,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _buildWelcomeHeader(auth),
                 const SizedBox(height: 20),
                 _buildStatCards(_summary),
-                const SizedBox(height: 16),
-                // DASH-01: Jobs today bar chart card
-                _buildJobsChartCard(),
                 const SizedBox(height: 24),
-                if (auth.isAdmin) ...[
-                  _buildUsersQuickCard(),
-                  const SizedBox(height: 24),
-                ],
+                _buildPendingExtensionsSection(),
                 if (vehicleStatus.isNotEmpty) ...[
                   _buildSectionTitle('Vehicle Status'),
                   const SizedBox(height: 12),
@@ -1079,71 +1067,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildUsersQuickCard() {
-    return InkWell(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const UsersScreen()),
-      ),
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              const Color(0xFF7C3AED).withOpacity(0.12),
-              const Color(0xFF7C3AED).withOpacity(0.04),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: const Color(0xFF7C3AED).withOpacity(0.25)),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color: const Color(0xFF7C3AED).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.people_outlined,
-                color: Color(0xFF7C3AED),
-                size: 24,
-              ),
-            ),
-            const SizedBox(width: 14),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'System Users',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      color: Color(0xFF7C3AED),
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Manage drivers, schedulers and admins',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(Icons.chevron_right, color: Color(0xFF7C3AED)),
-          ],
-        ),
-      ),
-    );
-  }
-
   // ── Shared helpers ────────────────────────────────────────────
 
   Widget _buildError(String error) {
@@ -1250,6 +1173,207 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ── Pending Time Extensions Section ────────────────────────────────────────
+  Widget _buildPendingExtensionsSection() {
+    final pending = context.watch<TimeExtensionProvider>().pendingRequests;
+    if (pending.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _buildSectionTitle('Time Extension Requests'),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '${pending.length}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange.shade800,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        ...pending.map((req) => _buildExtensionRequestCard(req)),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+
+  Widget _buildExtensionRequestCard(dynamic req) {
+    final duration = req.durationMinutes as int;
+    final durationLabel = duration >= 60
+        ? '${duration ~/ 60}h ${duration % 60 > 0 ? '${duration % 60}m' : ''}'
+        : '${duration}m';
+    final jobNum = req.jobNumber ?? 'Job #${req.jobId}';
+    final requester = req.requesterName ?? 'Technician';
+    final customer = req.customerName;
+    final ago = _timeAgo(req.createdAt);
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: Colors.orange.shade300, width: 1.5),
+      ),
+      elevation: 2,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => TimeExtensionApprovalScreen(
+                jobId: req.jobId,
+                requestId: req.id,
+              ),
+            ),
+          ).then((_) => _loadDashboard());
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.orange.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(
+                      Icons.timer_outlined,
+                      color: Colors.orange.shade700,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          jobNum,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                        Text(
+                          '$requester requests +$durationLabel',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.orange,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'PENDING',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              const Divider(height: 1),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Icon(Icons.notes, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      req.reason,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  if (customer != null) ...[
+                    Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
+                    const SizedBox(width: 4),
+                    Text(
+                      customer,
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(width: 12),
+                  ],
+                  Icon(Icons.access_time, size: 14, color: AppTheme.textSecondary),
+                  const SizedBox(width: 4),
+                  Text(
+                    ago,
+                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Tap to review',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.orange.shade700,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.arrow_forward_ios, size: 12, color: Colors.orange.shade700),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${diff.inDays}d ago';
+  }
+
+  void _openSchedulerPreview() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const SchedulerScreen()),
+    );
+  }
+
   Widget _buildStatCards(Map<String, dynamic> summary) {
     final cardData = [
       _StatCardData(
@@ -1287,9 +1411,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _buildStatCard(cardData[0])),
+              Expanded(child: _buildStatCard(cardData[0], onTap: _openSchedulerPreview)),
               const SizedBox(width: 12),
-              Expanded(child: _buildStatCard(cardData[1])),
+              Expanded(child: _buildStatCard(cardData[1], onTap: _openSchedulerPreview)),
             ],
           ),
         ),
@@ -1298,9 +1422,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(child: _buildStatCard(cardData[2])),
+              Expanded(child: _buildStatCard(cardData[2], onTap: _openSchedulerPreview)),
               const SizedBox(width: 12),
-              Expanded(child: _buildStatCard(cardData[3])),
+              Expanded(child: _buildStatCard(cardData[3], onTap: _openSchedulerPreview)),
             ],
           ),
         ),
@@ -1308,11 +1432,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatCard(_StatCardData data) {
+  Widget _buildStatCard(_StatCardData data, {VoidCallback? onTap}) {
     return Card(
       elevation: 3,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
+      child: InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -1386,6 +1513,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ],
         ),
+      ),
       ),
     );
   }

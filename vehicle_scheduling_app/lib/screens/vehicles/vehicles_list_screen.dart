@@ -16,6 +16,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/vehicle_provider.dart';
@@ -31,6 +32,26 @@ class VehiclesListScreen extends StatefulWidget {
 }
 
 class _VehiclesListScreenState extends State<VehiclesListScreen> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  List<Vehicle> _filteredVehicles(List<Vehicle> vehicles) {
+    if (_searchQuery.isEmpty) return vehicles;
+    return vehicles.where((v) {
+      final q = _searchQuery;
+      return v.vehicleName.toLowerCase().contains(q) ||
+          v.licensePlate.toLowerCase().contains(q) ||
+          v.vehicleType.toLowerCase().contains(q) ||
+          (v.notes?.toLowerCase().contains(q) ?? false);
+    }).toList();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -159,7 +180,7 @@ class _VehiclesListScreenState extends State<VehiclesListScreen> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         title: const Text('Vehicles'),
-        automaticallyImplyLeading: false,
+        automaticallyImplyLeading: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -169,6 +190,43 @@ class _VehiclesListScreenState extends State<VehiclesListScreen> {
       ),
       body: Column(
         children: [
+          // Search bar
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                hintText: 'Search vehicles...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _searchQuery = '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppTheme.dividerColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: AppTheme.dividerColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                ),
+              ),
+              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+            ),
+          ),
+
           // Role info banner
           if (!canManage)
             Container(
@@ -199,19 +257,77 @@ class _VehiclesListScreenState extends State<VehiclesListScreen> {
           // Vehicle list
           Expanded(
             child: vehicleProvider.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Shimmer.fromColors(
+                    baseColor: Colors.grey.shade300,
+                    highlightColor: Colors.grey.shade100,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 5,
+                      itemBuilder: (_, index) {
+                        final nameWidth = [130.0, 100.0, 150.0, 115.0, 140.0][index % 5];
+                        final plateWidth = [80.0, 70.0, 90.0, 75.0, 85.0][index % 5];
+                        final typeWidth = [60.0, 50.0, 70.0, 55.0, 65.0][index % 5];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(14),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 52,
+                                  height: 52,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Container(height: 14, width: nameWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                                          const Spacer(),
+                                          Container(height: 22, width: 65, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      Row(
+                                        children: [
+                                          Container(height: 10, width: plateWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                          const SizedBox(width: 12),
+                                          Container(height: 10, width: typeWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(height: 10, width: 100, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  )
                 : vehicleProvider.error != null
                 ? _buildError(vehicleProvider.error!, context)
-                : vehicleProvider.vehicles.isEmpty
+                : _filteredVehicles(vehicleProvider.vehicles).isEmpty
                 ? _buildEmpty(canManage)
                 : RefreshIndicator(
                     onRefresh: () =>
                         context.read<VehicleProvider>().loadVehicles(),
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                      itemCount: vehicleProvider.vehicles.length,
+                      itemCount: _filteredVehicles(vehicleProvider.vehicles).length,
                       itemBuilder: (context, index) {
-                        final vehicle = vehicleProvider.vehicles[index];
+                        final vehicle = _filteredVehicles(vehicleProvider.vehicles)[index];
                         final isActive = vehicle.isActive;
                         final iconColor = isActive
                             ? AppTheme.successColor
