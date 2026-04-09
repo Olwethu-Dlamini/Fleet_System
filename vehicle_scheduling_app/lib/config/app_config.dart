@@ -139,6 +139,12 @@ class AppConfig {
   // PATCH /api/time-extensions/:id/deny
   static const String timeExtensionsEndpoint = '/time-extensions';
 
+  // EMERALD INTEGRATION
+  // GET  /api/emerald/status
+  // POST /api/emerald/sync/customers
+  static const String emeraldStatusEndpoint = '/emerald/status';
+  static const String emeraldSyncEndpoint = '/emerald/sync/customers';
+
   // GPS
   // GET  /api/gps/directions?job_id=X&origin_lat=Y&origin_lng=Z
   // POST /api/gps/location

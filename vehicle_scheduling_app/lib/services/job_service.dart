@@ -39,7 +39,7 @@ class JobService {
   // ══════════════════════════════════════════════════════════
   Future<List<Job>> getAllJobs() async {
     try {
-      final response = await apiService.get(AppConfig.jobsEndpoint);
+      final response = await apiService.get('${AppConfig.jobsEndpoint}?limit=1000');
       if (response['success'] == true) {
         return _parseJobList(response['jobs']);
       }

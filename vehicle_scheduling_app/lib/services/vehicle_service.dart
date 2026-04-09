@@ -19,8 +19,8 @@ class VehicleService {
   // ══════════════════════════════════════════
   Future<List<Vehicle>> getAllVehicles({bool? activeOnly}) async {
     try {
-      String endpoint = AppConfig.vehiclesEndpoint;
-      if (activeOnly == true) endpoint += '?activeOnly=true';
+      String endpoint = '${AppConfig.vehiclesEndpoint}?limit=1000';
+      if (activeOnly == true) endpoint += '&activeOnly=true';
       final response = await apiService.get(endpoint);
       if (response['success'] == true && response['data'] != null) {
         return (response['data'] as List<dynamic>)

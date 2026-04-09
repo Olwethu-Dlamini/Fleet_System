@@ -24,11 +24,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vehicle_scheduling_app/models/job.dart';
 import 'package:vehicle_scheduling_app/services/job_service.dart';
+import 'package:vehicle_scheduling_app/services/offline_cache_service.dart';
 
 enum JobStatus { idle, loading, success, error }
 
 class JobProvider extends ChangeNotifier {
   final JobService _jobService = JobService();
+  final OfflineCacheService _cacheService = OfflineCacheService();
 
   // ==========================================
   // STATE
@@ -37,6 +39,7 @@ class JobProvider extends ChangeNotifier {
   Job? _selectedJob;
   JobStatus _status = JobStatus.idle;
   String? _error;
+  bool _isOffline = false;
 
   String? _statusFilter;
   String? _typeFilter;
@@ -51,6 +54,7 @@ class JobProvider extends ChangeNotifier {
   JobStatus get status => _status;
   String? get error => _error;
   bool get isLoading => _status == JobStatus.loading;
+  bool get isOffline => _isOffline;
   String? get statusFilter => _statusFilter;
   String? get typeFilter => _typeFilter;
   bool get weekendFilter => _weekendFilter;
@@ -88,10 +92,23 @@ class JobProvider extends ChangeNotifier {
 
     try {
       _jobs = await _jobService.getAllJobs();
+      _isOffline = false;
       _status = JobStatus.success;
+
+      // Cache for offline use
+      _cacheService.cacheJobs(_jobs.map((j) => j.toJson()).toList());
     } catch (e) {
-      _error = e.toString();
-      _status = JobStatus.error;
+      // API failed — try loading from offline cache
+      final cached = await _cacheService.getCachedJobs();
+      if (cached.isNotEmpty) {
+        _jobs = cached.map((j) => Job.fromJson(j)).toList();
+        _isOffline = true;
+        _status = JobStatus.success;
+        _error = null;
+      } else {
+        _error = e.toString();
+        _status = JobStatus.error;
+      }
     }
 
     notifyListeners();
@@ -107,10 +124,23 @@ class JobProvider extends ChangeNotifier {
 
     try {
       _jobs = await _jobService.getMyJobs();
+      _isOffline = false;
       _status = JobStatus.success;
+
+      // Cache for offline use
+      _cacheService.cacheJobs(_jobs.map((j) => j.toJson()).toList());
     } catch (e) {
-      _error = e.toString();
-      _status = JobStatus.error;
+      // API failed — try loading from offline cache
+      final cached = await _cacheService.getCachedJobs();
+      if (cached.isNotEmpty) {
+        _jobs = cached.map((j) => Job.fromJson(j)).toList();
+        _isOffline = true;
+        _status = JobStatus.success;
+        _error = null;
+      } else {
+        _error = e.toString();
+        _status = JobStatus.error;
+      }
     }
 
     notifyListeners();

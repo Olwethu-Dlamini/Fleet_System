@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shimmer/shimmer.dart';
 import 'package:vehicle_scheduling_app/config/theme.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
 import 'package:vehicle_scheduling_app/providers/job_provider.dart';
@@ -22,6 +23,15 @@ class JobsListScreen extends StatefulWidget {
 }
 
 class _JobsListScreenState extends State<JobsListScreen> {
+  final _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -109,6 +119,44 @@ class _JobsListScreenState extends State<JobsListScreen> {
       ),
       body: Column(
         children: [
+          // Search bar
+          if (!auth.isTechnician)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search jobs, customers...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                        )
+                      : null,
+                  filled: true,
+                  fillColor: Colors.white,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppTheme.dividerColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: AppTheme.dividerColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.primaryColor, width: 1.5),
+                  ),
+                ),
+                onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+              ),
+            ),
+
           // Active filter indicator (admin/scheduler only)
           if (!auth.isTechnician && jobProvider.statusFilter != null)
             Container(
@@ -192,7 +240,9 @@ class _JobsListScreenState extends State<JobsListScreen> {
             child: Row(
               children: [
                 Text(
-                  '${jobProvider.jobs.length} job${jobProvider.jobs.length == 1 ? '' : 's'}',
+                  _searchQuery.isNotEmpty || jobProvider.statusFilter != null || jobProvider.weekendFilter
+                      ? 'Showing ${_filteredJobs(jobProvider).length} of ${jobProvider.allJobs.length} jobs'
+                      : '${jobProvider.jobs.length} job${jobProvider.jobs.length == 1 ? '' : 's'}',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -215,20 +265,67 @@ class _JobsListScreenState extends State<JobsListScreen> {
           // List
           Expanded(
             child: jobProvider.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Shimmer.fromColors(
+                    baseColor: Colors.grey.shade300,
+                    highlightColor: Colors.grey.shade100,
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: 6,
+                      itemBuilder: (_, index) {
+                        // Vary widths for a more realistic look
+                        final nameWidth = [140.0, 110.0, 160.0, 120.0, 130.0, 100.0][index % 6];
+                        final typeWidth = [80.0, 65.0, 90.0, 70.0, 85.0, 75.0][index % 6];
+                        final customerWidth = [110.0, 90.0, 130.0, 100.0, 120.0, 95.0][index % 6];
+                        final timeWidth = [85.0, 75.0, 95.0, 80.0, 90.0, 70.0][index % 6];
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(children: [
+                                  const CircleAvatar(radius: 20, backgroundColor: Colors.white),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                                    Container(height: 14, width: nameWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4))),
+                                    const SizedBox(height: 6),
+                                    Container(height: 10, width: typeWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                  ])),
+                                  Container(height: 22, width: 70, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20))),
+                                ]),
+                                const SizedBox(height: 12),
+                                Container(height: 1, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(1))),
+                                const SizedBox(height: 12),
+                                Row(children: [
+                                  Container(height: 10, width: customerWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                  const SizedBox(width: 16),
+                                  Container(height: 10, width: timeWidth, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(3))),
+                                ]),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  )
                 : jobProvider.error != null
                 ? _buildError(jobProvider.error!)
-                : jobProvider.jobs.isEmpty
-                ? _buildEmpty(canCreate, auth.isTechnician)
+                : _filteredJobs(jobProvider).isEmpty
+                ? _searchQuery.isNotEmpty
+                    ? _buildNoResults()
+                    : _buildEmpty(canCreate, auth.isTechnician)
                 : RefreshIndicator(
                     onRefresh: () async {
                       if (mounted) _loadJobs();
                     },
                     child: ListView.builder(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
-                      itemCount: jobProvider.jobs.length,
+                      itemCount: _filteredJobs(jobProvider).length,
                       itemBuilder: (context, index) {
-                        final job = jobProvider.jobs[index];
+                        final job = _filteredJobs(jobProvider)[index];
                         final color = AppTheme.getStatusColor(
                           job.currentStatus,
                         );
@@ -273,12 +370,37 @@ class _JobsListScreenState extends State<JobsListScreen> {
                                           crossAxisAlignment:
                                               CrossAxisAlignment.start,
                                           children: [
-                                            Text(
-                                              job.jobNumber,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 14,
-                                              ),
+                                            Row(
+                                              children: [
+                                                Flexible(
+                                                  child: Text(
+                                                    job.jobNumber,
+                                                    style: const TextStyle(
+                                                      fontWeight: FontWeight.bold,
+                                                      fontSize: 14,
+                                                    ),
+                                                    overflow: TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                                if (job.jobNumber.startsWith('EMR-')) ...[
+                                                  const SizedBox(width: 6),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(0xFF10B981).withOpacity(0.15),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: const Text(
+                                                      'Emerald',
+                                                      style: TextStyle(
+                                                        color: Color(0xFF059669),
+                                                        fontSize: 10,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ],
                                             ),
                                             Text(
                                               job.typeDisplayName,
@@ -482,6 +604,44 @@ class _JobsListScreenState extends State<JobsListScreen> {
             onPressed: _refreshJobs,
             icon: const Icon(Icons.refresh),
             label: const Text('Retry'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<dynamic> _filteredJobs(JobProvider provider) {
+    if (_searchQuery.isEmpty) return provider.jobs;
+    return provider.jobs.where((job) {
+      final q = _searchQuery;
+      return job.jobNumber.toLowerCase().contains(q) ||
+          job.customerName.toLowerCase().contains(q) ||
+          (job.customerAddress?.toLowerCase().contains(q) ?? false) ||
+          (job.description?.toLowerCase().contains(q) ?? false) ||
+          job.jobType.toLowerCase().contains(q) ||
+          job.currentStatus.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  Widget _buildNoResults() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.search_off, size: 60, color: AppTheme.textHint),
+          const SizedBox(height: 16),
+          const Text(
+            'No matching jobs',
+            style: TextStyle(
+              fontSize: 18,
+              color: AppTheme.textSecondary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'No jobs match "$_searchQuery"',
+            style: const TextStyle(color: AppTheme.textHint, fontSize: 13),
           ),
         ],
       ),

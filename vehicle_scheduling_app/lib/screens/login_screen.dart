@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart'; // ← needed for LogicalKeyboardKey
 import 'package:provider/provider.dart';
 import 'package:vehicle_scheduling_app/providers/auth_provider.dart';
+import 'package:vehicle_scheduling_app/screens/forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -170,12 +171,35 @@ class _LoginScreenState extends State<LoginScreen>
                           },
                         ),
 
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 8),
 
-                        const Text(
-                          'Test credentials: admin / Admin@123',
-                          style: TextStyle(color: Colors.grey, fontSize: 12),
+                        // ── Forgot password link ──
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const ForgotPasswordScreen(),
+                                ),
+                              );
+                            },
+                            style: TextButton.styleFrom(
+                              foregroundColor: const Color(0xFF3B93EB),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                            ),
+                            child: const Text(
+                              'Forgot password?',
+                              style: TextStyle(fontSize: 14),
+                            ),
+                          ),
                         ),
+
+                        const SizedBox(height: 8),
                       ],
                     ),
                   ),

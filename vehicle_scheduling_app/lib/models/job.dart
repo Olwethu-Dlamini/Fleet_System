@@ -36,6 +36,8 @@ class Job {
   final String customerName;
   final String? customerPhone;
   final String customerAddress;
+  final double? destinationLat; // ← NEW
+  final double? destinationLng; // ← NEW
   final String? description;
   final DateTime scheduledDate;
   final String scheduledTimeStart;
@@ -66,6 +68,8 @@ class Job {
     required this.customerName,
     this.customerPhone,
     required this.customerAddress,
+    this.destinationLat, // ← NEW
+    this.destinationLng, // ← NEW
     this.description,
     required this.scheduledDate,
     required this.scheduledTimeStart,
@@ -93,6 +97,14 @@ class Job {
     if (value is double) return value.toInt();
     if (value is String) return int.tryParse(value) ?? 0;
     return 0;
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value == null) return null;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   static DateTime _parseDate(dynamic value) {
@@ -145,6 +157,8 @@ class Job {
       customerName: json['customer_name'] as String,
       customerPhone: json['customer_phone'] as String?,
       customerAddress: json['customer_address'] as String,
+      destinationLat: _parseDouble(json['destination_lat']), // ← NEW
+      destinationLng: _parseDouble(json['destination_lng']), // ← NEW
       description: json['description'] as String?,
       scheduledDate: _parseDate(json['scheduled_date']),
       scheduledTimeStart: json['scheduled_time_start'] as String,
@@ -168,20 +182,37 @@ class Job {
 
   // ──────────────────────────────────────────
   // TO JSON
+  // Full serialization for offline caching (round-trips through fromJson).
+  // Also works for create-job payloads — backend ignores extra fields.
   // ──────────────────────────────────────────
   Map<String, dynamic> toJson() => {
+    'id': id,
+    'job_number': jobNumber,
+    'job_type': jobType,
     'customer_name': customerName,
     'customer_phone': customerPhone,
     'customer_address': customerAddress,
-    'job_type': jobType,
+    'destination_lat': destinationLat,
+    'destination_lng': destinationLng,
     'description': description,
     'scheduled_date':
         '${scheduledDate.year}-${scheduledDate.month.toString().padLeft(2, '0')}-${scheduledDate.day.toString().padLeft(2, '0')}',
     'scheduled_time_start': scheduledTimeStart,
     'scheduled_time_end': scheduledTimeEnd,
     'estimated_duration_minutes': estimatedDurationMinutes,
+    'current_status': currentStatus,
     'priority': priority,
     'created_by': createdBy,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+    'vehicle_id': vehicleId,
+    'vehicle_name': vehicleName,
+    'license_plate': licensePlate,
+    'driver_id': driverId,
+    'driver_name': driverName,
+    'technicians': technicians
+        .map((t) => {'id': t.id, 'full_name': t.fullName})
+        .toList(),
   };
 
   // ──────────────────────────────────────────

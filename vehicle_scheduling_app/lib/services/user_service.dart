@@ -17,10 +17,10 @@ class UserService {
   // ── List ────────────────────────────────────────────────────
   Future<List<User>> getUsers({String? role, String active = '1'}) async {
     String url = _endpoint;
-    final params = <String>[];
+    final params = <String>['limit=1000'];
     if (role != null) params.add('role=$role');
     if (active != '1') params.add('active=$active');
-    if (params.isNotEmpty) url += '?${params.join('&')}';
+    url += '?${params.join('&')}';
 
     final response = await apiService.get(url);
     if (response['success'] == true) {

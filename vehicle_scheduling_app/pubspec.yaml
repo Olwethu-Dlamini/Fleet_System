@@ -49,6 +49,8 @@ dependencies:
   flutter_local_notifications: ^18.0.1  # Show foreground notifications on Android
   flutter_polyline_points: ^3.1.0  # Decode Google encoded polyline for map route rendering
   socket_io_client: ^3.1.4         # Socket.IO client for future real-time GPS upgrade path
+  shimmer: ^3.0.0                  # Skeleton loading shimmer effects
+  csv: ^6.0.0                      # CSV parsing for bulk import
 
 dev_dependencies:
   flutter_test:

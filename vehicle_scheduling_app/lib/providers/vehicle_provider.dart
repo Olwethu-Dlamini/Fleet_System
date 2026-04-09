@@ -8,9 +8,11 @@
 import 'package:flutter/material.dart';
 import 'package:vehicle_scheduling_app/models/vehicle.dart';
 import 'package:vehicle_scheduling_app/services/vehicle_service.dart';
+import 'package:vehicle_scheduling_app/services/offline_cache_service.dart';
 
 class VehicleProvider extends ChangeNotifier {
   final VehicleService _vehicleService = VehicleService();
+  final OfflineCacheService _cacheService = OfflineCacheService();
 
   // ==========================================
   // STATE
@@ -18,6 +20,7 @@ class VehicleProvider extends ChangeNotifier {
   List<Vehicle> _vehicles = [];
   bool _isLoading = false;
   String? _error;
+  bool _isOffline = false;
 
   // ==========================================
   // GETTERS
@@ -27,6 +30,7 @@ class VehicleProvider extends ChangeNotifier {
       _vehicles.where((v) => v.isActive).toList();
   bool get isLoading => _isLoading;
   String? get error => _error;
+  bool get isOffline => _isOffline;
 
   // Expose service so AuthProvider can inject token:
   //   auth.injectToken(context.read<VehicleProvider>().vehicleService.apiService)
@@ -42,10 +46,23 @@ class VehicleProvider extends ChangeNotifier {
 
     try {
       _vehicles = await _vehicleService.getAllVehicles();
+      _isOffline = false;
       _isLoading = false;
+
+      // Cache for offline use
+      _cacheService.cacheVehicles(_vehicles.map((v) => v.toJson()).toList());
     } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
+      // API failed — try loading from offline cache
+      final cached = await _cacheService.getCachedVehicles();
+      if (cached.isNotEmpty) {
+        _vehicles = cached.map((v) => Vehicle.fromJson(v)).toList();
+        _isOffline = true;
+        _isLoading = false;
+        _error = null;
+      } else {
+        _error = e.toString();
+        _isLoading = false;
+      }
     }
     notifyListeners();
   }
@@ -60,10 +77,26 @@ class VehicleProvider extends ChangeNotifier {
 
     try {
       _vehicles = await _vehicleService.getActiveVehicles();
+      _isOffline = false;
       _isLoading = false;
+
+      // Cache for offline use
+      _cacheService.cacheVehicles(_vehicles.map((v) => v.toJson()).toList());
     } catch (e) {
-      _error = e.toString();
-      _isLoading = false;
+      // API failed — try loading from offline cache (filter active only)
+      final cached = await _cacheService.getCachedVehicles();
+      if (cached.isNotEmpty) {
+        _vehicles = cached
+            .map((v) => Vehicle.fromJson(v))
+            .where((v) => v.isActive)
+            .toList();
+        _isOffline = true;
+        _isLoading = false;
+        _error = null;
+      } else {
+        _error = e.toString();
+        _isLoading = false;
+      }
     }
     notifyListeners();
   }
