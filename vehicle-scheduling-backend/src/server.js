@@ -38,8 +38,16 @@ const io = new Server(httpServer, {
 });
 const PORT = process.env.PORT || 3000;
 
+const crypto = require('crypto');
+
 const JWT_SECRET  = process.env.JWT_SECRET;
-const JWT_EXPIRES = process.env.JWT_EXPIRES || '8h';
+const JWT_EXPIRES = process.env.JWT_EXPIRES || '1h';
+const REFRESH_SECRET  = JWT_SECRET + '_refresh';
+const REFRESH_EXPIRES = '7d';
+
+function hashTokenInline(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 // ============================================
 // Role normalisation helper
@@ -155,7 +163,20 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
       { expiresIn: JWT_EXPIRES }
     );
 
+    // -- Generate refresh token (long-lived) --
+    const refreshToken = jwt.sign(
+      { id: user.id, username: user.username, type: 'refresh' },
+      REFRESH_SECRET,
+      { expiresIn: REFRESH_EXPIRES }
+    );
+
     logger.info({ userId: user.id, role: normalisedRole }, 'User logged in');
+
+    // -- Audit log (fire-and-forget) --
+    try {
+      const auditService = require('./services/auditService');
+      auditService.log(req, 'login', 'user', user.id, { username });
+    } catch (_) { /* audit not critical */ }
 
     // NOTIF-06: Subscribe FCM token to user-specific topic (fire-and-forget)
     // Topic naming: driver_{userId} for technicians, scheduler_{userId} for admin/scheduler
@@ -178,10 +199,11 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
     }
 
     return res.status(200).json({
-      success  : true,
-      token    : token,
-      expiresIn: JWT_EXPIRES,
-      user     : {
+      success     : true,
+      token       : token,
+      refreshToken: refreshToken,
+      expiresIn   : JWT_EXPIRES,
+      user        : {
         id         : user.id,
         username   : user.username,
         full_name  : user.full_name,
@@ -226,9 +248,57 @@ app.get('/api/auth/me', async (req, res) => {
   }
 });
 
-// POST /api/auth/logout
-app.post('/api/auth/logout', (req, res) => {
-  res.status(200).json({ success: true, message: 'Logged out successfully' });
+// POST /api/auth/logout — blacklist tokens
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    // -- Blacklist the access token --
+    const authHeader = req.headers['authorization'];
+    if (authHeader) {
+      const accessToken = authHeader.split(' ')[1];
+      if (accessToken) {
+        try {
+          const decoded = jwt.decode(accessToken);
+          const expiresAt = decoded && decoded.exp
+            ? new Date(decoded.exp * 1000)
+            : new Date(Date.now() + 3600000);
+          await db.query(
+            'INSERT INTO token_blacklist (token_hash, expires_at) VALUES (?, ?)',
+            [hashTokenInline(accessToken), expiresAt]
+          );
+        } catch (_) { /* best effort */ }
+      }
+    }
+
+    // -- Blacklist the refresh token if provided --
+    const { refreshToken } = req.body || {};
+    if (refreshToken) {
+      try {
+        const decoded = jwt.decode(refreshToken);
+        const expiresAt = decoded && decoded.exp
+          ? new Date(decoded.exp * 1000)
+          : new Date(Date.now() + 7 * 86400000);
+        await db.query(
+          'INSERT INTO token_blacklist (token_hash, expires_at) VALUES (?, ?)',
+          [hashTokenInline(refreshToken), expiresAt]
+        );
+      } catch (_) { /* best effort */ }
+    }
+
+    // -- Audit log --
+    try {
+      const auditService = require('./services/auditService');
+      let userId = null;
+      if (authHeader) {
+        try { userId = jwt.decode(authHeader.split(' ')[1])?.id; } catch (_) {}
+      }
+      auditService.log(req, 'logout', 'user', userId, {});
+    } catch (_) { /* audit not critical */ }
+
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
+  } catch (error) {
+    logger.error({ err: error }, 'Logout error');
+    res.status(200).json({ success: true, message: 'Logged out successfully' });
+  }
 });
 
 // ======================
@@ -304,6 +374,33 @@ if (require.main === module) {
     try {
       await db.query('SELECT 1 as test');
       logger.info('Database connection verified');
+
+      // ============================================
+      // DB MIGRATION: Auth tables (token blacklist, password reset)
+      // Idempotent — safe to run on every startup
+      // ============================================
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS token_blacklist (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          token_hash VARCHAR(64) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_token_hash (token_hash),
+          INDEX idx_expires (expires_at)
+        )
+      `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+          id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+          user_id INT UNSIGNED NOT NULL,
+          token_hash VARCHAR(64) NOT NULL,
+          expires_at TIMESTAMP NOT NULL,
+          used TINYINT DEFAULT 0,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_token_hash (token_hash)
+        )
+      `);
+      logger.info('Auth tables ensured');
 
       // ============================================
       // DB MIGRATION: Notification tables (Phase 5)

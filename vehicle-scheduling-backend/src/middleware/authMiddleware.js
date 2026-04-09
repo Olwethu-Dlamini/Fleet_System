@@ -14,13 +14,13 @@ const JWT_SECRET = process.env.JWT_SECRET;
 // ============================================
 // VERIFY TOKEN
 // Attaches decoded user to req.user, then calls next().
-// Returns 401 if token is missing, invalid, or expired.
+// Returns 401 if token is missing, invalid, expired, or blacklisted.
 // ============================================
 /**
  * Usage:
  *   router.get('/protected', verifyToken, controller.method);
  */
-const verifyToken = (req, res, next) => {
+const verifyToken = async (req, res, next) => {
   try {
     const authHeader = req.headers['authorization'];
 
@@ -41,6 +41,23 @@ const verifyToken = (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, JWT_SECRET);
+
+    // -- Check if token has been blacklisted (logout) --
+    try {
+      const { isBlacklisted, hashToken } = require('../controllers/authController');
+      const tokenHash = hashToken(token);
+      if (await isBlacklisted(tokenHash)) {
+        return res.status(401).json({
+          success: false,
+          message: 'Token has been revoked. Please log in again.',
+        });
+      }
+    } catch (blacklistErr) {
+      // If blacklist check fails (e.g. table not yet created), allow through
+      // rather than blocking all authenticated requests
+      log.warn({ err: blacklistErr.message }, 'Token blacklist check failed — allowing through');
+    }
+
     req.user = decoded;
     next();
 
