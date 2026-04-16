@@ -107,8 +107,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [x] **DOC-01**: User manual — admin guide
 - [x] **DOC-02**: User manual — scheduler guide
 - [x] **DOC-03**: User manual — driver/technician guide
-- [ ] **DOC-04**: API documentation (Swagger, already partially exists)
-- [ ] **DOC-05**: Deployment guide (Docker setup, environment variables)
+- [x] **DOC-04**: API documentation (Swagger, already partially exists)
+- [x] **DOC-05**: Deployment guide (Docker setup, environment variables)
 
 ## v2 Requirements
 
